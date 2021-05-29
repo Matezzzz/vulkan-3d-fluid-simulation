@@ -1,0 +1,3 @@
+[submodule "just-a-vulkan-library"]
+	path = just-a-vulkan-library
+	url = https://github.com/Matezzzz/just-a-vulkan-library
