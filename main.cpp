@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 
-#include "vulkan_include_all.h"
+#include "just-a-vulkan-library/vulkan_include_all.h"
 
 using std::vector;
 using std::string;

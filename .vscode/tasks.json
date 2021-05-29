@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Compile shaders",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}\\build_shaders.py"
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "Compile all",
+            /*"dependsOn":[ 
+                "Compile shaders"
+            ],*/
+            "command": "mingw32-make all",
+            "options": {
+                "cwd": "${workspaceFolder}/.obj"
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Build and run",
+            "dependsOn": [
+                "Compile all"
+            ],
+            "command": "${workspaceFolder}\\vulkan.exe",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+        
+    ]
+}
