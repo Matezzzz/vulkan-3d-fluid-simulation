@@ -2,10 +2,13 @@ import pathlib
 import os
 from subprocess import run
 import colorama
+import sys
 
 colorama.init()
 
-root_dir = pathlib.Path("./shaders")
+root_dir = pathlib.Path(".")
+
+return_code = 0
 
 for shader_dir in root_dir.iterdir():
     if shader_dir.is_dir():
@@ -21,3 +24,6 @@ for shader_dir in root_dir.iterdir():
                     proc = run(["glslangValidator", "-V", shader, "-o", compiled_shader], capture_output=True)
                     if proc.returncode:
                         print (colorama.Style.RESET_ALL, "Output: ", colorama.Style.BRIGHT, colorama.Fore.RED, proc.stdout.decode("ascii"), sep="")
+                        return_code = 1
+
+sys.exit(return_code)

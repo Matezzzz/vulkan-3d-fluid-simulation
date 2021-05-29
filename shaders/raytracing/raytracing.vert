@@ -12,7 +12,6 @@ layout( push_constant ) uniform push_const{
     mat4 MVP_inverse;
 };
 
-   
 
 void main(){
     //compute ray vector in current boundary point. This will cause it to be interpolated over all fragments

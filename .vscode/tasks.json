@@ -6,15 +6,18 @@
             "label": "Compile shaders",
             "command": "python",
             "args": [
-                "${workspaceFolder}\\build_shaders.py"
-            ]
+                "build_shaders.py"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\shaders"
+            }
         },
         {
             "type": "shell",
             "label": "Compile all",
-            /*"dependsOn":[ 
+            "dependsOn":[ 
                 "Compile shaders"
-            ],*/
+            ],
             "command": "g++",
             "args": [
                 "-std=c++17",
