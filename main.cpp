@@ -11,7 +11,8 @@ uint32_t screen_width = 1400;
 uint32_t screen_height = 1400;
 string app_name = "Hello Vulkan :)";
 
-
+uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
+uint32_t max_particle_count = 1000000;
 
 int main()
 {
@@ -52,8 +53,14 @@ int main()
 
 
     // * Creating an image on the GPU *
-    //Image img = ImageInfo(screen_width, screen_height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT).create();
-    //ImageMemoryObject memory({img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT);
+    Image velocities_1_img = velocity_image_info.create();
+    Image velocities_2_img = velocity_image_info.create();
+    Image cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    Image particle_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    Image pressure_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_type_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    
     // * Creating an image view *
     //ImageView color_image_view = color_image.createView();
 
