@@ -15,9 +15,17 @@
             /*"dependsOn":[ 
                 "Compile shaders"
             ],*/
-            "command": "mingw32-make all",
+            "command": "g++",
+            "args": [
+                "-std=c++17",
+                "main.cpp",
+                "-L${workspaceFolder}\\just-a-vulkan-library",
+                "-LC:/Program Files/MSYS2/mingw64/x86_64-w64-mingw32/lib",
+                "-lJAVL", "-lglfw3dll",
+                "-o", "fluid_sim.exe"
+            ],
             "options": {
-                "cwd": "${workspaceFolder}/.obj"
+                "cwd": "${workspaceFolder}"
             }
         },
         {
@@ -26,7 +34,7 @@
             "dependsOn": [
                 "Compile all"
             ],
-            "command": "${workspaceFolder}\\vulkan.exe",
+            "command": "${workspaceFolder}\\fluid_sim.exe",
             "group": {
                 "kind": "build",
                 "isDefault": true
