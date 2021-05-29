@@ -9,7 +9,7 @@
                 "build_shaders.py"
             ],
             "options": {
-                "cwd": "${workspaceFolder}\\shaders"
+                "cwd": "${workspaceFolder}\\shaders_fluid"
             }
         },
         {

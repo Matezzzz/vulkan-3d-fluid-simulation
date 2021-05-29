@@ -1,2 +1,2 @@
 fluid_sim.exe
-shaders/*/*.spv
+shaders_fluid/*/*.spv
