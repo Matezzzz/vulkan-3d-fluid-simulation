@@ -3,7 +3,7 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "Compile shaders",
+            "label": "CompileShaders",
             "command": "python",
             "args": [
                 "build_shaders.py"
@@ -14,9 +14,20 @@
         },
         {
             "type": "shell",
-            "label": "Compile all",
+            "label": "CompileLibrary",
+            "command": "mingw32-make",
+            "args": [
+                "all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\just-a-vulkan-library\\.obj"
+            }
+        },
+        {
+            "type": "shell",
+            "label": "CompileProject",
             "dependsOn":[ 
-                "Compile shaders"
+                "CompileLibrary"
             ],
             "command": "g++",
             "args": [
@@ -35,7 +46,8 @@
             "type": "shell",
             "label": "Build and run",
             "dependsOn": [
-                "Compile all"
+                "CompileShaders",
+                "CompileProject"
             ],
             "command": "${workspaceFolder}\\fluid_sim.exe",
             "group": {

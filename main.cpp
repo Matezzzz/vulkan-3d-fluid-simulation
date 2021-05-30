@@ -54,13 +54,16 @@ int main()
 
     // * Creating an image on the GPU *
     ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT);
-    Image velocities_1_img = velocity_image_info.create();
-    Image velocities_2_img = velocity_image_info.create();
-    Image cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    Image particle_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    Image pressure_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage velocities_1_img = velocity_image_info.create();
+    ExtImage velocities_2_img = velocity_image_info.create();
+    ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage particle_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage pressure_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
     ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_type_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     
+
+    VkSampler advect_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).create();
+
     // * Creating an image view *
     //ImageView color_image_view = color_image.createView();
 
@@ -74,15 +77,12 @@ int main()
 
     PipelineContext& advect_context(fluid_pipeline_context.getContext("01_advect"));
     advect_context.reserveDescriptorSets(1);
-    advect_context.makeSharedDescriptorSet(0, update_grid_context, 0);
 
     PipelineContext& forces_context(fluid_pipeline_context.getContext("02_forces"));
     forces_context.reserveDescriptorSets(1);
-    forces_context.makeSharedDescriptorSet(0, update_grid_context, 0);
 
     PipelineContext& diffuse_context(fluid_pipeline_context.getContext("03_diffuse"));
     diffuse_context.reserveDescriptorSets(1);
-    diffuse_context.makeSharedDescriptorSet(0, update_grid_context, 0);
     
     //after reserving all sets call:
     fluid_pipeline_context.createDescriptorPool();
@@ -103,15 +103,27 @@ int main()
 
     
     // * Allocating descriptor sets *
-    DescriptorSet descriptor_set_fluid;
-    update_grid_context.allocateDescriptorSets(descriptor_set_fluid);
+    DescriptorSet descriptor_set_grid, descriptor_set_advect, descriptor_set_forces, descriptor_set_diffuse;
+    update_grid_context.allocateDescriptorSets(descriptor_set_grid, descriptor_set_advect, descriptor_set_forces, descriptor_set_diffuse);
     //actual sets to bind, used later when binding pipeline
-    vector<VkDescriptorSet> fluid_descriptor_sets{descriptor_set_fluid};
+    //vector<VkDescriptorSet> fluid_descriptor_sets{descriptor_set_fluid};
     
+
     // * Updating descriptor sets *
-    fluid_descriptor_sets.updateDescriptors(
-        DescriptorUpdateInfo{"velocities_1",   VK+, texture_sampler, copper_plate_images.getImageView(0)},
+    descriptor_set_grid.updateDescriptors(
+        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+        StorageImageUpdateInfo{"particles", particle_img, VK_IMAGE_LAYOUT_GENERAL}
     );
+    descriptor_set_advect.updateDescriptors(
+        StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
+        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+        CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+    );
+    descriptor_set_forces.updateDescriptors(
+        StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
+        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
+    );
+
 
     // * Managing push constant data *
     //PushConstantData copper_push_constants = shader_ctx.createPushConstantData();
@@ -157,6 +169,9 @@ int main()
 
         // * Start recording a command buffer *
         draw_command_buffer.startRecordPrimary();
+
+        //draw_command_buffer.cmdBindPipeline();
+        //draw_command_buffer.cmdDispatchCompute();
         // * Set memory barrier *
         /*draw_command_buffer.cmdBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,\
             {color_image.createMemoryBarrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),

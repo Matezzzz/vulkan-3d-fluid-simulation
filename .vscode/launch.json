@@ -5,7 +5,7 @@
             "name": "C++ Debug (gdb)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/vulkan.exe",
+            "program": "${workspaceFolder}/fluid_sim.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
