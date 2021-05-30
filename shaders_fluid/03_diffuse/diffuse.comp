@@ -1,0 +1,24 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform restrict writeonly image3D velocities_1;
+layout(set = 0, binding = 1, rgba32f) uniform restrict readonly image3D velocities_2;
+layout(set = 0, binding = 2, r8i)     uniform readonly restrict iimage3D cell_types;
+
+const int CELL_WATER = 1;
+const float time_delta = 0.01;
+const float diffuse_a = 0.005;
+const float diffuse_b = 1.0 - 6 * diffuse_k;
+
+
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    if (imageLoad(cell_types, i).x == CELL_WATER){
+        vec3 velocity = diffuse_b * (imageLoad(velocities_2, i))
+
+        imageStore(velocities_2, i, imageLoad(velocities_2, i) + time_delta*vec4(0, 0, gravity, 0));
+    }
+}

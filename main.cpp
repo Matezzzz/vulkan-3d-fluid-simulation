@@ -67,12 +67,25 @@ int main()
     // * Creating a sampler *
     //VkSampler sampler = SamplerInfo().create();
 
-    // * Creating a pipelines context *
-    //DirectoryPipelinesContext pipelines_context{"shaders"};
-    //PipelineContext& shader_ctx(pipelines_context.getContext("basic"));
-    //shader_ctx.reserveDescriptorSets(1, 1);
+    // * Creating a pipeline context *
+    DirectoryPipelinesContext fluid_pipeline_context{"shaders_fluid"};
+    PipelineContext& update_grid_context(fluid_pipeline_context.getContext("00_update_grid"));
+    update_grid_context.reserveDescriptorSets(1);
+
+    PipelineContext& advect_context(fluid_pipeline_context.getContext("01_advect"));
+    advect_context.reserveDescriptorSets(1);
+    advect_context.makeSharedDescriptorSet(0, update_grid_context, 0);
+
+    PipelineContext& forces_context(fluid_pipeline_context.getContext("02_forces"));
+    forces_context.reserveDescriptorSets(1);
+    forces_context.makeSharedDescriptorSet(0, update_grid_context, 0);
+
+    PipelineContext& diffuse_context(fluid_pipeline_context.getContext("03_diffuse"));
+    diffuse_context.reserveDescriptorSets(1);
+    diffuse_context.makeSharedDescriptorSet(0, update_grid_context, 0);
+    
     //after reserving all sets call:
-    //pipelines_context.createDescriptorPool();
+    fluid_pipeline_context.createDescriptorPool();
 
 
     // * Managing uniform buffer data for given context *
@@ -90,15 +103,15 @@ int main()
 
     
     // * Allocating descriptor sets *
-    //DescriptorSet set_textures, set_uniform_buffer;
-    //shader_ctx.allocateDescriptorSets(set_textures, set_uniform_buffer);
+    DescriptorSet descriptor_set_fluid;
+    update_grid_context.allocateDescriptorSets(descriptor_set_fluid);
     //actual sets to bind, used later when binding pipeline
-    //vector<VkDescriptorSet> copper_descriptor_sets{set_textures, set_uniform_buffer};
+    vector<VkDescriptorSet> fluid_descriptor_sets{descriptor_set_fluid};
     
     // * Updating descriptor sets *
-    /*set_textures.updateDescriptors(
-        DescriptorUpdateInfo{"in_shader_descriptor_name",   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture_sampler, copper_plate_images.getImageView(0)},
-    );*/
+    fluid_descriptor_sets.updateDescriptors(
+        DescriptorUpdateInfo{"velocities_1",   VK+, texture_sampler, copper_plate_images.getImageView(0)},
+    );
 
     // * Managing push constant data *
     //PushConstantData copper_push_constants = shader_ctx.createPushConstantData();
