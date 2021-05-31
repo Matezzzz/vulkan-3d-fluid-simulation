@@ -3,6 +3,7 @@
 #include <string>
 
 #include "just-a-vulkan-library/vulkan_include_all.h"
+#include "compute_renderpass.h"
 
 using std::vector;
 using std::string;
@@ -12,7 +13,8 @@ uint32_t screen_height = 1400;
 string app_name = "Hello Vulkan :)";
 
 uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
-uint32_t max_particle_count = 1000000;
+constexpr uint32_t max_particle_count = 1000000;
+constexpr uint32_t update_grid_local_x = 256;
 
 int main()
 {
@@ -59,10 +61,37 @@ int main()
     ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
     ExtImage particle_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
     ExtImage pressure_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_type_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_type_img, particle_img, pressure_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+
 
     VkSampler advect_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).create();
+
+    enum Attachments{
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES
+    };
+
+    vector<ExtImage> attachments{velocities_1_img, velocities_2_img, cell_type_img, particle_img, pressure_img};
+    vector<ComputeRenderpassSection> sections{
+        ComputeRenderpassSection{
+            "00_update_grid", max_particle_count / update_grid_local_x, 1, 1,
+            vector<ComputeSectionImageUsage>{
+                ComputeSectionImageUsage{CELL_TYPES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT},
+                ComputeSectionImageUsage{PARTICLES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"particles", particle_img, VK_IMAGE_LAYOUT_GENERAL}
+            }
+        }
+    };
+    vector<ImageState> image_states{
+        ImageState{}, ImageState{}, ImageState{}, ImageState{}, ImageState{}
+    };
+
+    ComputeRenderpass compute_renderpass("shaders_fluid", attachments, sections, image_states, command_pool);
+
+
 
     // * Creating an image view *
     //ImageView color_image_view = color_image.createView();

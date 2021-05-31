@@ -32,6 +32,7 @@
             "command": "g++",
             "args": [
                 "-std=c++17",
+                "-g",
                 "main.cpp",
                 "-L${workspaceFolder}\\just-a-vulkan-library",
                 "-LC:/Program Files/MSYS2/mingw64/x86_64-w64-mingw32/lib",
