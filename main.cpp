@@ -129,20 +129,10 @@ int main()
     );*/
     //Buffer& plane_vertices      = m_vertex_buffers[0];
     //Buffer& screen_q_vertices       = m_vertex_buffers[1];
-
-    
-    // * Allocating descriptor sets *
-    DescriptorSet descriptor_set_grid, descriptor_set_advect, descriptor_set_forces, descriptor_set_diffuse;
-    update_grid_context.allocateDescriptorSets(descriptor_set_grid, descriptor_set_advect, descriptor_set_forces, descriptor_set_diffuse);
-    //actual sets to bind, used later when binding pipeline
-    //vector<VkDescriptorSet> fluid_descriptor_sets{descriptor_set_fluid};
     
 
     // * Updating descriptor sets *
-    descriptor_set_grid.updateDescriptors(
-        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-        StorageImageUpdateInfo{"particles", particle_img, VK_IMAGE_LAYOUT_GENERAL}
-    );
+    /*
     descriptor_set_advect.updateDescriptors(
         StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
         StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
@@ -152,6 +142,7 @@ int main()
         StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
         StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
     );
+    */
 
 
     // * Managing push constant data *
