@@ -1,14 +1,38 @@
 #include "just-a-vulkan-library/vulkan_include_all.h"
 
 
+enum ImageStatesEnum{
+    IMAGE_SAMPLER,
+    IMAGE_STORAGE_R,
+    IMAGE_STORAGE_W,
+    IMAGE_STORAGE_RW
+};
+constexpr VkImageLayout image_states_layouts[]{
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_IMAGE_LAYOUT_GENERAL,
+    VK_IMAGE_LAYOUT_GENERAL,
+    VK_IMAGE_LAYOUT_GENERAL
+};
+constexpr VkAccessFlags image_states_accesses[]{
+    VK_ACCESS_SHADER_READ_BIT,
+    VK_ACCESS_SHADER_READ_BIT,
+    VK_ACCESS_SHADER_WRITE_BIT,
+    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+};
+
+
+
 
 constexpr VkImageLayout LAYOUT_NOT_USED_YET = VK_IMAGE_LAYOUT_MAX_ENUM;
-struct ImageState{
+class ImageState{
+public:
     VkImageLayout layout;
     VkAccessFlags access;
-    VkPipelineStageFlags last_use;
-    ImageState(VkImageLayout layout_ = VK_IMAGE_LAYOUT_UNDEFINED, VkAccessFlags access_ = 0, VkPipelineStageFlags last_use_ = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) :
-        layout(layout_), access(access_), last_use(last_use_)
+    
+    ImageState(VkImageLayout layout_, VkAccessFlags access_) :
+        layout(layout_), access(access_)
+    {}
+    ImageState(ImageStatesEnum s) : ImageState(image_states_layouts[s], image_states_accesses[s])
     {}
     bool operator==(const ImageState& s){
         return layout == s.layout && access == s.access;
@@ -19,14 +43,25 @@ struct ImageState{
 };
 
 
+class PipelineImageState : public ImageState{
+public:
+    VkPipelineStageFlags last_use;
+    PipelineImageState(VkImageLayout layout_ = VK_IMAGE_LAYOUT_UNDEFINED, VkAccessFlags access_ = 0, VkPipelineStageFlags last_use_ = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) :
+        ImageState(layout_, access_), last_use(last_use_)
+    {}
+};
+
+
+
+
 struct ComputeSectionImageUsage{
     int descriptor_index;
     VkPipelineStageFlags use_from;
     VkPipelineStageFlags use_to;
     VkImageLayout layout;
     VkAccessFlags access;
-    ImageState toImageState(bool stage_from) const{
-        return ImageState{layout, access, stage_from ? use_from : use_to};
+    PipelineImageState toImageState(bool stage_from) const{
+        return PipelineImageState{layout, access, stage_from ? use_from : use_to};
     }
 };
 
@@ -52,7 +87,7 @@ class ComputeRenderpass{
     CommandBuffer m_init_buffer;
     CommandBuffer m_draw_buffer;
 public:
-    ComputeRenderpass(const string& shader_dir, const vector<ExtImage>& attachments, const vector<ComputeRenderpassSection>& sections, vector<ImageState> image_states, CommandPool& command_pool) :
+    ComputeRenderpass(const string& shader_dir, const vector<ExtImage>& attachments, const vector<ComputeRenderpassSection>& sections, vector<PipelineImageState> image_states, CommandPool& command_pool) :
         m_dir_context(shader_dir), m_contexts(sections.size()), m_pipelines(sections.size()), m_descriptor_sets(sections.size()),
         m_images(attachments), m_init_buffer(command_pool.allocateBuffer()), m_draw_buffer(command_pool.allocateBuffer())
     {
@@ -67,7 +102,7 @@ public:
             m_contexts[i]->allocateDescriptorSets(m_descriptor_sets[i]);
             m_descriptor_sets[i].updateDescriptorsV(sections[i].descriptor_infos);
         }
-        vector<ImageState> first_image_states, last_image_states;
+        vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(sections, first_image_states, last_image_states);
         recordInitBuffer(first_image_states, image_states, m_init_buffer);
         
@@ -94,12 +129,12 @@ public:
         m_draw_buffer.endRecordPrimary();
     }
 private:
-    void getStartingAndEndingImageStates(const vector<ComputeRenderpassSection>& sections, vector<ImageState>& image_first_uses, vector<ImageState>& image_last_uses){
-        image_first_uses.resize(m_images.size(), ImageState{LAYOUT_NOT_USED_YET});
-        image_last_uses.resize(m_images.size(), ImageState{LAYOUT_NOT_USED_YET});
+    void getStartingAndEndingImageStates(const vector<ComputeRenderpassSection>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
+        image_first_uses.resize(m_images.size(), PipelineImageState{LAYOUT_NOT_USED_YET});
+        image_last_uses.resize(m_images.size(), PipelineImageState{LAYOUT_NOT_USED_YET});
         for (const ComputeRenderpassSection& section : sections){
             for (const ComputeSectionImageUsage& img : section.descriptors_used){
-                ImageState& s = image_first_uses[img.descriptor_index];
+                PipelineImageState& s = image_first_uses[img.descriptor_index];
                 if (s.layout == LAYOUT_NOT_USED_YET){
                     s = img.toImageState(true);
                 }
@@ -107,7 +142,7 @@ private:
             }
         }
     }
-    void recordInitBuffer(const vector<ImageState>& image_first_uses, vector<ImageState>& image_states, CommandBuffer& init_buffer){
+    void recordInitBuffer(const vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_states, CommandBuffer& init_buffer){
         m_init_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         for (int i = 0; i < (int) m_images.size(); i++){
             if (image_first_uses[i].layout == LAYOUT_NOT_USED_YET){
@@ -115,7 +150,7 @@ private:
             }else{
                 VkImageMemoryBarrier m = m_images[i].createMemoryBarrier(image_states[i].layout, image_states[i].access, image_first_uses[i].layout, image_first_uses[i].access);
                 init_buffer.cmdBarrier(image_states[i].last_use, image_first_uses[i].last_use, m);
-                image_states[i] = ImageState{image_first_uses[i]};
+                image_states[i] = PipelineImageState{image_first_uses[i]};
             }
         }
         m_init_buffer.endRecordPrimary();

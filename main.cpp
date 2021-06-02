@@ -83,6 +83,19 @@ int main()
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"particles", particle_img, VK_IMAGE_LAYOUT_GENERAL}
             }
+        },
+        ComputeRenderpassSection{
+            "01_advect", fluid_width / 128, 128 / 8, 3,
+            vector<ComputeSectionImageUsage>{
+                ComputeSectionImageUsage{VELOCITIES_2, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT},
+                ComputeSectionImageUsage{CELL_TYPES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT},
+                ComputeSectionImageUsage{VELOCITIES_1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+            }
         }
     };
     vector<ImageState> image_states{
@@ -98,11 +111,6 @@ int main()
 
     // * Creating a sampler *
     //VkSampler sampler = SamplerInfo().create();
-
-    // * Creating a pipeline context *
-    DirectoryPipelinesContext fluid_pipeline_context{"shaders_fluid"};
-    PipelineContext& update_grid_context(fluid_pipeline_context.getContext("00_update_grid"));
-    update_grid_context.reserveDescriptorSets(1);
 
     PipelineContext& advect_context(fluid_pipeline_context.getContext("01_advect"));
     advect_context.reserveDescriptorSets(1);
