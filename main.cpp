@@ -71,36 +71,40 @@ int main()
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES
     };
 
+
+    ImageUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
     vector<ExtImage> attachments{velocities_1_img, velocities_2_img, cell_type_img, particle_img, pressure_img};
-    vector<ComputeRenderpassSection> sections{
-        ComputeRenderpassSection{
-            "00_update_grid", max_particle_count / update_grid_local_x, 1, 1,
-            vector<ComputeSectionImageUsage>{
-                ComputeSectionImageUsage{CELL_TYPES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT},
-                ComputeSectionImageUsage{PARTICLES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT},
+    vector<PipelineImageState> image_states(5);
+
+
+    vector<unique_ptr<FlowSection>> sections{
+        make_unique<FlowSection>(
+            "00_update_grid", Size3{max_particle_count / update_grid_local_x, 1, 1},
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-                StorageImageUpdateInfo{"particles", particle_img, VK_IMAGE_LAYOUT_GENERAL}
+                StorageImageUpdateInfo{"particles",   particle_img, VK_IMAGE_LAYOUT_GENERAL}
             }
-        },
-        ComputeRenderpassSection{
-            "01_advect", fluid_width / 128, 128 / 8, 3,
-            vector<ComputeSectionImageUsage>{
-                ComputeSectionImageUsage{VELOCITIES_2, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT},
-                ComputeSectionImageUsage{CELL_TYPES, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT},
-                ComputeSectionImageUsage{VELOCITIES_1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT},
+        ),
+        make_unique<FlowSection>(
+            "01_advect", Size3{fluid_width / 128, 128 / 8, 3},
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_SAMPLER}},
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
             }
-        }
+        )
     };
-    vector<ImageState> image_states{
-        ImageState{}, ImageState{}, ImageState{}, ImageState{}, ImageState{}
-    };
+    
 
     ComputeRenderpass compute_renderpass("shaders_fluid", attachments, sections, image_states, command_pool);
 
