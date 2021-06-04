@@ -16,11 +16,11 @@ public:
         m_dir_context.createDescriptorPool();
         sections_exec.reserve(sections.size());
         for (auto& s : sections){
-            sections_exec.push_back(s->complete());
+            sections_exec.push_back(s->complete(images));
         }
+    
         vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
-
         startRecordPrimary();
         if (loop){
             for (int i = 0; i < images.size(); i++){

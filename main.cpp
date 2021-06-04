@@ -78,7 +78,11 @@ int main()
     vector<PipelineImageState> image_states(5);
 
 
+
     
+    
+
+
     vector<unique_ptr<FlowSection>> sections;
     sections.emplace_back(
         make_unique<FlowComputeSection>(
@@ -109,7 +113,7 @@ int main()
         )
     );
 
-    FlowCommandBuffer fluid_iteration_buffer("shaders_fluid", attachments, sections, image_states, command_pool);
+    FlowCommandBuffer fluid_iteration_buffer("shaders_fluid", attachments, sections, image_states, command_pool, true);
 
 
 
