@@ -74,14 +74,26 @@ int main()
 
     ImageUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    vector<ExtImage> attachments{velocities_1_img, velocities_2_img, cell_type_img, particle_img, pressure_img};
+    vector<ExtImage> images{velocities_1_img, velocities_2_img, cell_type_img, particle_img, pressure_img};
     vector<PipelineImageState> image_states(5);
 
-
+    enum CellTypes{
+        CELL_AIR, CELL_WATER, CELL_SOLID
+    };
 
     
-    
+    vector<unique_ptr<FlowSection>> init_sections;
+    init_sections.emplace_back(make_unique<FlowClearColorSection>(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)));
+    init_sections.emplace_back(make_unique<FlowClearColorSection>(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)));
+    init_sections.emplace_back(make_unique<FlowClearColorSection>(  CELL_TYPES, ClearValue(CELL_AIR)));
+    init_sections.emplace_back(make_unique<FlowClearColorSection>(   PARTICLES, ClearValue(0.f, 0.f, 0.f)));
+    init_sections.emplace_back(make_unique<FlowClearColorSection>(   PRESSURES, ClearValue(0.f)));
+    init_sections.emplace_back(make_unique<FlowTransitionSection>(
+        vector<ImageState>{ImageState{IMAGE_SAMPLER}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_R}, ImageState{IMAGE_NEWLY_CREATED}})
+    );
 
+    FlowCommandBuffer init_buffer{command_pool};
+    init_buffer.record(images, init_sections, image_states);
 
     vector<unique_ptr<FlowSection>> sections;
     sections.emplace_back(
@@ -113,7 +125,8 @@ int main()
         )
     );
 
-    FlowCommandBuffer fluid_iteration_buffer("shaders_fluid", attachments, sections, image_states, command_pool, true);
+    FlowShaderCommandBuffer draw_buffer(command_pool);
+    draw_buffer.record("shaders_fluid", images, sections, image_states);
 
 
 

@@ -4,16 +4,13 @@
 
 
 class FlowCommandBuffer : public CommandBuffer{
-    DirectoryPipelinesContext m_dir_context;
 public:
-    FlowCommandBuffer(const string& shader_dir, const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states, CommandPool& command_pool, bool loop = false) :
-        CommandBuffer(command_pool.allocateBuffer()), m_dir_context(shader_dir)
+    FlowCommandBuffer(CommandPool& command_pool) : CommandBuffer(command_pool.allocateBuffer())
+    {}
+    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states,
+        bool loop = false, bool start_record = true, bool end_record = true)
     {
         vector<unique_ptr<FlowSectionExec>> sections_exec;
-        for (auto& s : sections){
-            s->initialize(m_dir_context);
-        }
-        m_dir_context.createDescriptorPool();
         sections_exec.reserve(sections.size());
         for (auto& s : sections){
             sections_exec.push_back(s->complete(images));
@@ -21,7 +18,7 @@ public:
     
         vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
-        startRecordPrimary();
+        if (start_record) startRecordPrimary();
         if (loop){
             for (int i = 0; i < images.size(); i++){
                 if (first_image_states[i] != image_states[i]){
@@ -45,7 +42,7 @@ public:
             }
             sections_exec[i]->execute(*this);
         }
-        endRecordPrimary();
+        if (end_record) endRecordPrimary();
     }
 private:
     void getStartingAndEndingImageStates(int image_count, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
@@ -63,14 +60,33 @@ private:
     }
     void convertImagesToStartingConfig(const vector<ExtImage>& images, const vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_states){
         for (int i = 0; i < (int) images.size(); i++){
-            if (image_first_uses[i].layout == LAYOUT_NOT_USED_YET){
-                PRINT_ERROR("Image not used at all during the compute pipeline. Index: " << i);
-            }else{
+            if (image_first_uses[i].layout != LAYOUT_NOT_USED_YET){
                 VkImageMemoryBarrier m = images[i].createMemoryBarrier(image_states[i], image_first_uses[i]);
                 cmdBarrier(image_states[i].last_use, image_first_uses[i].last_use, m);
                 image_states[i] = PipelineImageState{image_first_uses[i]};
             }
         }
     }
+
 };
 
+
+
+class FlowShaderCommandBuffer : public FlowCommandBuffer{
+public:
+    FlowShaderCommandBuffer(CommandPool& command_pool) : FlowCommandBuffer(command_pool)
+    {}
+    void record(const string& shader_dir, const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states,
+        bool loop = false, bool start_record = true, bool end_record = true)
+    {
+        DirectoryPipelinesContext dir_context(shader_dir);
+        initializeShaderStages(sections, dir_context);
+        FlowCommandBuffer::record(images, sections, image_states, loop, start_record, end_record);
+    }
+    void initializeShaderStages(const vector<unique_ptr<FlowSection>>& sections, DirectoryPipelinesContext& dir_ctx){
+        for (auto& s : sections){
+            s->initialize_shader(dir_ctx);
+        }
+        dir_ctx.createDescriptorPool();
+    }
+};
