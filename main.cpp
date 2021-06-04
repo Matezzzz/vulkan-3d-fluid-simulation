@@ -3,7 +3,7 @@
 #include <string>
 
 #include "just-a-vulkan-library/vulkan_include_all.h"
-#include "compute_renderpass.h"
+#include "flow_command_buffer.h"
 
 using std::vector;
 using std::string;
@@ -78,8 +78,10 @@ int main()
     vector<PipelineImageState> image_states(5);
 
 
-    vector<unique_ptr<FlowSection>> sections{
-        make_unique<FlowSection>(
+    
+    vector<unique_ptr<FlowSection>> sections;
+    sections.emplace_back(
+        make_unique<FlowComputeSection>(
             "00_update_grid", Size3{max_particle_count / update_grid_local_x, 1, 1},
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
@@ -89,8 +91,10 @@ int main()
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"particles",   particle_img, VK_IMAGE_LAYOUT_GENERAL}
             }
-        ),
-        make_unique<FlowSection>(
+        )
+    );
+    sections.emplace_back(
+        make_unique<FlowComputeSection>(
             "01_advect", Size3{fluid_width / 128, 128 / 8, 3},
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
@@ -103,30 +107,11 @@ int main()
                 CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
             }
         )
-    };
-    
+    );
 
-    ComputeRenderpass compute_renderpass("shaders_fluid", attachments, sections, image_states, command_pool);
-
+    FlowCommandBuffer fluid_iteration_buffer("shaders_fluid", attachments, sections, image_states, command_pool);
 
 
-    // * Creating an image view *
-    //ImageView color_image_view = color_image.createView();
-
-    // * Creating a sampler *
-    //VkSampler sampler = SamplerInfo().create();
-
-    PipelineContext& advect_context(fluid_pipeline_context.getContext("01_advect"));
-    advect_context.reserveDescriptorSets(1);
-
-    PipelineContext& forces_context(fluid_pipeline_context.getContext("02_forces"));
-    forces_context.reserveDescriptorSets(1);
-
-    PipelineContext& diffuse_context(fluid_pipeline_context.getContext("03_diffuse"));
-    diffuse_context.reserveDescriptorSets(1);
-    
-    //after reserving all sets call:
-    fluid_pipeline_context.createDescriptorPool();
 
 
     // * Managing uniform buffer data for given context *
