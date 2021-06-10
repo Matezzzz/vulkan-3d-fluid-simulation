@@ -1,0 +1,28 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 128, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r8i)     uniform readonly restrict iimage3D cell_types;
+layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
+
+const int CELL_AIR = 0;
+const int CELL_WATER = 1;
+
+void main(){
+    ivec3 i = gl_GlobalInvocationID.xyz;
+    vec4 v = imageLoad(velocities, i);
+
+    if (imageLoad(cell_types, i).x == CELL_AIR){
+        int c = 0;
+        vec4 v = vec4(0, 0, 0, 0);
+
+        if (imageLoad(cell_types, i + ivec3(1, 0, 0)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i + ivec3(0, 1, 0)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i + ivec3(0, 0, 1)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i - ivec3(1, 0, 0)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i - ivec3(0, 1, 0)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i - ivec3(0, 0, 1)).x == CELL_SOLID){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (c != 0) imageStore(velocities, i, v / c);
+    }
+}
