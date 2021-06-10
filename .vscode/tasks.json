@@ -3,17 +3,6 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "CompileShaders",
-            "command": "python",
-            "args": [
-                "build_shaders.py"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}\\shaders_fluid"
-            }
-        },
-        {
-            "type": "shell",
             "label": "CompileLibrary",
             "command": "mingw32-make",
             "args": [
@@ -25,9 +14,23 @@
         },
         {
             "type": "shell",
-            "label": "CompileProject",
+            "label": "CompileShaders",
             "dependsOn":[ 
                 "CompileLibrary"
+            ],
+            "command": "python",
+            "args": [
+                "build_shaders.py"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}\\shaders_fluid"
+            }
+        },
+        {
+            "type": "shell",
+            "label": "CompileProject",
+            "dependsOn":[ 
+                "CompileShaders"
             ],
             "command": "g++",
             "args": [
@@ -47,7 +50,6 @@
             "type": "shell",
             "label": "Build and run",
             "dependsOn": [
-                "CompileShaders",
                 "CompileProject"
             ],
             "command": "${workspaceFolder}\\fluid_sim.exe",

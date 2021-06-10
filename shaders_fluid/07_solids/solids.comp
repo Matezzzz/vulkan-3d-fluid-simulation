@@ -9,7 +9,7 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 const int CELL_SOLID = 2;
 
 void main(){
-    ivec3 i = gl_GlobalInvocationID.xyz;
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     vec4 v = imageLoad(velocities, i);
 
     if (imageLoad(cell_types, i).x == CELL_SOLID){

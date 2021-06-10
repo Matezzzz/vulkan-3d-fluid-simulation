@@ -10,7 +10,7 @@ const float time_delta = 0.01;
 
 
 void main(){
-    int i = gl_GlobalInvocationID.x;
+    int i = int(gl_GlobalInvocationID.x);
     vec3 pos = imageLoad(particles, int(i)).xyz;
     vec3 v = texture(velocities, pos).xyz;
     imageStore(particles, i, vec4(pos + v*time_delta, 0.0));

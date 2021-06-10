@@ -14,7 +14,7 @@ string app_name = "Hello Vulkan :)";
 
 
 
-int fluid_width = 128, fluid_height = 128, fluid_depth = 3;
+uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
 Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 Size3 fluid_local_group_size{128, 8, 1};
 Size3 particle_local_group_size{256, 1, 1};
