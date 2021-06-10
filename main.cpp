@@ -12,10 +12,15 @@ uint32_t screen_width = 1400;
 uint32_t screen_height = 1400;
 string app_name = "Hello Vulkan :)";
 
-Size3 fluid_size{128, 128, 3};
+
+
+int fluid_width = 128, fluid_height = 128, fluid_depth = 3;
+Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 Size3 fluid_local_group_size{128, 8, 1};
+Size3 particle_local_group_size{256, 1, 1};
 Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
-constexpr uint32_t max_particle_count = 1000000;
+constexpr uint32_t max_particle_count = 65536;
+Size3 particle_dispatch_size = Size3{max_particle_count, 1, 1} / particle_local_group_size;
 constexpr uint32_t update_grid_local_x = 256;
 
 int main()
@@ -100,7 +105,7 @@ int main()
 
     SectionList draw_sections{
         new FlowComputeSection(
-            fluid_context, "00_update_grid", Size3{max_particle_count / update_grid_local_x, 1, 1},
+            fluid_context, "00_update_grid", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}}

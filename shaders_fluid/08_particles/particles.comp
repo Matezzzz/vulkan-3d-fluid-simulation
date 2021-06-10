@@ -1,0 +1,18 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform restrict image3D velocities_2;
+layout(set = 0, binding = 1, r8i)     uniform readonly restrict iimage3D cell_types;
+
+const int CELL_WATER = 1;
+const float time_delta = 0.01;
+const float gravity = -1;
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    if (imageLoad(cell_types, i).x == CELL_WATER){
+        imageStore(velocities_2, i, imageLoad(velocities_2, i) + time_delta*vec4(0, 0, gravity, 0));
+    }
+}
