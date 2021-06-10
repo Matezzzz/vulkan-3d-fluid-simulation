@@ -10,6 +10,9 @@ using std::make_unique;
 
 struct Size3{
     uint32_t x, y, z;
+    Size3 operator/(const Size3& s) const{
+        return Size3{x / s.x, y / s.y, z / s.z};
+    }
 };
 
 class PipelineImageState : public ImageState{
@@ -58,31 +61,25 @@ public:
 
 
 
-
-class FlowSectionExec{
-public:
-    virtual void execute(CommandBuffer&) = 0;
-};
 class FlowSection{
 public:
     vector<FlowSectionImageUsage> m_images_used;
     FlowSection(const vector<FlowSectionImageUsage>& usages) : m_images_used(usages)
     {}
-    virtual void initialize_shader(DirectoryPipelinesContext&){}
-    virtual unique_ptr<FlowSectionExec> complete(const vector<ExtImage>&) = 0;
+    virtual void initializeShader(DirectoryPipelinesContext&){}
+    virtual void complete(const vector<ExtImage>&) = 0;
+    virtual void execute(CommandBuffer&) = 0;
 };
 
 
 
 
-class FlowTransitionSectionExec : public FlowSectionExec{
-public:
-    virtual void execute(CommandBuffer&){}
-};
 class FlowTransitionSection : public FlowSection{
 public:
     FlowTransitionSection(const vector<ImageState>& new_states) : FlowSection(createImageUsageVector(new_states))
     {}
+    virtual void complete(const vector<ExtImage>&){}
+    virtual void execute(CommandBuffer&){}
 private:
     vector<FlowSectionImageUsage> createImageUsageVector(const vector<ImageState>& new_states){
         vector<FlowSectionImageUsage> usg(new_states.size());
@@ -91,70 +88,82 @@ private:
         }
         return usg;
     }
-    virtual unique_ptr<FlowSectionExec> complete(const vector<ExtImage>&){
-        return make_unique<FlowTransitionSectionExec>();
-    }
 };
 
 
 
 
-class FlowClearColorSectionExec : public FlowSectionExec{
-    const ExtImage& m_image;
-    VkClearColorValue m_clear_value;
-public:
-    FlowClearColorSectionExec(const ExtImage& image, VkClearValue clear_value) : m_image(image), m_clear_value(clear_value.color)
-    {}
-    virtual void execute(CommandBuffer& buffer){
-        buffer.cmdClearColor(m_image, ImageState{IMAGE_TRANSFER_DST}, m_clear_value);
-    }
-};
+
+
 class FlowClearColorSection : public FlowSection{
     VkClearValue m_clear_value;
+    const ExtImage* m_image;
 public:
     FlowClearColorSection(int descriptor_index, VkClearValue clear_value) :
         FlowSection({FlowSectionImageUsage(descriptor_index, ImageUsageStage(VK_PIPELINE_STAGE_TRANSFER_BIT), ImageState{IMAGE_TRANSFER_DST})}), m_clear_value(clear_value)
     {}
-    virtual unique_ptr<FlowSectionExec> complete(const vector<ExtImage>& attachments){
-        return make_unique<FlowClearColorSectionExec>(attachments[m_images_used[0].descriptor_index], m_clear_value);
-    }
-};
-
-
-
-
-class FlowComputeSectionExec : public FlowSectionExec{
-    Pipeline pipeline;
-    DescriptorSet set;
-    Size3 compute_size;
-public:
-    FlowComputeSectionExec(PipelineContext* ctx, Size3 comp_size, const vector<DescriptorUpdateInfo>& update_infos) :
-        pipeline(ctx->createComputePipeline()), compute_size(comp_size)
-    {
-        ctx->allocateDescriptorSets(set);
-        set.updateDescriptorsV(update_infos);
+    virtual void complete(const vector<ExtImage>& attachments){
+        m_image = &attachments[m_images_used[0].descriptor_index];
     }
     virtual void execute(CommandBuffer& buffer){
-        buffer.cmdBindPipeline(pipeline, set);
-        buffer.cmdDispatchCompute(compute_size.x, compute_size.y, compute_size.z);
+        buffer.cmdClearColor(*m_image, ImageState{IMAGE_TRANSFER_DST}, m_clear_value.color);
     }
 };
+
+
+
 class FlowComputeSection : public FlowSection{
     string m_shader_dir_name;
     Size3 m_compute_size;
     
-    vector<DescriptorUpdateInfo> m_descriptor_infos;
-    PipelineContext* m_context = nullptr;
+    vector<DescriptorUpdateInfo> m_descriptor_update_infos;
+    PipelineContext& m_context;
+
+    Pipeline m_pipeline;
+    DescriptorSet m_descriptor_set;
 public:
-    FlowComputeSection(const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
-        FlowSection(usages), m_shader_dir_name(name), m_compute_size(compute_size), m_descriptor_infos(update_infos)
-    {}
-    virtual void initialize_shader(DirectoryPipelinesContext& ctx){
-        m_context = &ctx.getContext(m_shader_dir_name);
-        m_context->reserveDescriptorSets(1);
+    FlowComputeSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
+        FlowSection(usages), m_shader_dir_name(name), m_compute_size(compute_size), m_descriptor_update_infos(update_infos), m_context(ctx.getContext(m_shader_dir_name))
+    {
+        m_context.reserveDescriptorSets(1);
     }
-    virtual unique_ptr<FlowSectionExec> complete(const vector<ExtImage>&){
-        return make_unique<FlowComputeSectionExec>(m_context, m_compute_size, m_descriptor_infos);
+    PipelineContext& getShaderContext(){
+        return m_context;
+    }
+    virtual void complete(const vector<ExtImage>&){
+        m_pipeline = m_context.createComputePipeline();
+        m_context.allocateDescriptorSets(m_descriptor_set);
+        m_descriptor_set.updateDescriptorsV(m_descriptor_update_infos);
+    }
+    virtual void execute(CommandBuffer& buffer){
+        buffer.cmdBindPipeline(m_pipeline, m_descriptor_set);
+        buffer.cmdDispatchCompute(m_compute_size.x, m_compute_size.y, m_compute_size.z);
+    }
+};
+
+
+class FlowComputeWithPushConstantsSection : public FlowComputeSection{
+public:
+    FlowComputeWithPushConstantsSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
+        FlowComputeSection(ctx, name, compute_size, usages, update_infos)
+    {}
+};
+
+
+
+class SectionList : public vector<unique_ptr<FlowSection>>{
+public:
+    template<typename... Args>
+    SectionList(Args*... args){
+        reserve(sizeof...(args));
+        addSections(args...);
+    }
+private:
+    void addSections(){}
+    template<typename T, typename... Args>
+    void addSections(T* ptr, Args... args){
+        emplace_back(unique_ptr<T>(ptr));
+        addSections(args...);
     }
 };
 

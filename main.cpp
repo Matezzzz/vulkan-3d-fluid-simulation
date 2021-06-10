@@ -12,7 +12,9 @@ uint32_t screen_width = 1400;
 uint32_t screen_height = 1400;
 string app_name = "Hello Vulkan :)";
 
-uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
+Size3 fluid_size{128, 128, 3};
+Size3 fluid_local_group_size{128, 8, 1};
+Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 constexpr uint32_t max_particle_count = 1000000;
 constexpr uint32_t update_grid_local_x = 256;
 
@@ -82,36 +84,34 @@ int main()
     };
 
     
-    vector<unique_ptr<FlowSection>> init_sections;
-    init_sections.emplace_back(make_unique<FlowClearColorSection>(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)));
-    init_sections.emplace_back(make_unique<FlowClearColorSection>(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)));
-    init_sections.emplace_back(make_unique<FlowClearColorSection>(  CELL_TYPES, ClearValue(CELL_AIR)));
-    init_sections.emplace_back(make_unique<FlowClearColorSection>(   PARTICLES, ClearValue(0.f, 0.f, 0.f)));
-    init_sections.emplace_back(make_unique<FlowClearColorSection>(   PRESSURES, ClearValue(0.f)));
-    init_sections.emplace_back(make_unique<FlowTransitionSection>(
-        vector<ImageState>{ImageState{IMAGE_SAMPLER}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_R}, ImageState{IMAGE_NEWLY_CREATED}})
-    );
+    SectionList init_sections{
+        new FlowClearColorSection(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
+        new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(   PRESSURES, ClearValue(0.f)),
+        new FlowTransitionSection({ImageState{IMAGE_SAMPLER}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_R}, ImageState{IMAGE_NEWLY_CREATED}})
+    };
 
     FlowCommandBuffer init_buffer{command_pool};
     init_buffer.record(images, init_sections, image_states);
 
-    vector<unique_ptr<FlowSection>> sections;
-    sections.emplace_back(
-        make_unique<FlowComputeSection>(
-            "00_update_grid", Size3{max_particle_count / update_grid_local_x, 1, 1},
+    DirectoryPipelinesContext fluid_context("shaders_fluid");
+
+    SectionList draw_sections{
+        new FlowComputeSection(
+            fluid_context, "00_update_grid", Size3{max_particle_count / update_grid_local_x, 1, 1},
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
-                FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}}
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"particles",   particle_img, VK_IMAGE_LAYOUT_GENERAL}
             }
-        )
-    );
-    sections.emplace_back(
-        make_unique<FlowComputeSection>(
-            "01_advect", Size3{fluid_width / 128, 128 / 8, 3},
+        ),
+        new FlowComputeSection(
+            fluid_context, "01_advect", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
@@ -122,12 +122,25 @@ int main()
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
             }
-        )
-    );
+        ),
+        new FlowComputeSection(
+            fluid_context, "02_forces", fluid_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}},
+                FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+            }
+        ),
+    };
 
-    FlowShaderCommandBuffer draw_buffer(command_pool);
-    draw_buffer.record("shaders_fluid", images, sections, image_states);
+    FlowCommandBuffer draw_buffer(command_pool);
+    draw_buffer.record(images, draw_sections, image_states);
 
+    FlowCommandBuffer pressure_solve_buffer(command_pool);
+    pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo());
 
 
 
@@ -192,6 +205,10 @@ int main()
     SubmitSynchronization frame_synchronization;
     Fence frame_done_fence;
     frame_synchronization.setEndFence(frame_done_fence);
+
+    queue.submit(init_buffer, frame_synchronization);
+    frame_synchronization.waitFor(SYNC_FRAME);
+
     
     while (window.running())
     {
@@ -227,15 +244,11 @@ int main()
         // * End render pass *
         draw_command_buffer.cmdEndRenderPass();
 
-        draw_command_buffer.endRecordPrimary();
+        draw_command_buffer.endRecord();
         
         // * Submit command buffer and wait for it to finish*
         queue.submit(draw_command_buffer, frame_synchronization);
-        if (!frame_synchronization.waitFor(SYNC_FRAME))
-        {
-            cout << "Waiting for queue failed.\n";
-        }
-        frame_done_fence.reset();
+        frame_synchronization.waitFor(SYNC_FRAME);
         
         // * Present rendered image and reset buffer for next frame *
         swapchain.presentImage(swapchain_image, present_queue);

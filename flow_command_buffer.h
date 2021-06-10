@@ -10,12 +10,9 @@ public:
     void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states,
         bool loop = false, bool start_record = true, bool end_record = true)
     {
-        vector<unique_ptr<FlowSectionExec>> sections_exec;
-        sections_exec.reserve(sections.size());
         for (auto& s : sections){
-            sections_exec.push_back(s->complete(images));
+            s->complete(images);
         }
-    
         vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
         if (start_record) startRecordPrimary();
@@ -40,9 +37,9 @@ public:
                     image_states[img.descriptor_index] = img.toImageState(false);
                 }
             }
-            sections_exec[i]->execute(*this);
+            sections[i]->execute(*this);
         }
-        if (end_record) endRecordPrimary();
+        if (end_record) endRecord();
     }
 private:
     void getStartingAndEndingImageStates(int image_count, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
@@ -66,27 +63,5 @@ private:
                 image_states[i] = PipelineImageState{image_first_uses[i]};
             }
         }
-    }
-
-};
-
-
-
-class FlowShaderCommandBuffer : public FlowCommandBuffer{
-public:
-    FlowShaderCommandBuffer(CommandPool& command_pool) : FlowCommandBuffer(command_pool)
-    {}
-    void record(const string& shader_dir, const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states,
-        bool loop = false, bool start_record = true, bool end_record = true)
-    {
-        DirectoryPipelinesContext dir_context(shader_dir);
-        initializeShaderStages(sections, dir_context);
-        FlowCommandBuffer::record(images, sections, image_states, loop, start_record, end_record);
-    }
-    void initializeShaderStages(const vector<unique_ptr<FlowSection>>& sections, DirectoryPipelinesContext& dir_ctx){
-        for (auto& s : sections){
-            s->initialize_shader(dir_ctx);
-        }
-        dir_ctx.createDescriptorPool();
     }
 };
