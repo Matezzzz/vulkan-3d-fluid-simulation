@@ -54,7 +54,6 @@ int main()
     
     // * Create command pool and default command buffer *
     CommandPool command_pool = CommandPoolInfo{0}.create();
-    CommandBuffer draw_command_buffer = command_pool.allocateBuffer();
 
     // * Create local object creator -  used to copy data from RAM to GPU * 
     //uint32_t image_width = 1024;
@@ -64,11 +63,11 @@ int main()
 
 
     // * Creating an image on the GPU *
-    ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     ExtImage velocities_1_img = velocity_image_info.create();
     ExtImage velocities_2_img = velocity_image_info.create();
     ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    ExtImage particles_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage particles_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
@@ -77,7 +76,7 @@ int main()
 
 
 
-    VkSampler advect_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).create();
+    VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).create();
 
     enum Attachments{
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
@@ -130,18 +129,6 @@ int main()
         FlowSectionImageUsage{DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}}
     };
 
-    auto pressure_section = new FlowComputePushConstantSection(
-        fluid_context, "05_pressure", fluid_dispatch_size,
-        pressure_solve_image_usages,
-        vector<DescriptorUpdateInfo>{
-            StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
-        }
-    );
-
-
     SectionList draw_section_list_1{
         new FlowComputeSection(
             fluid_context, "00_update_grid", particle_dispatch_size,
@@ -163,7 +150,7 @@ int main()
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-                CombinedImageSamplerUpdateInfo{"velocities_src_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                CombinedImageSamplerUpdateInfo{"velocities_src_sampler", velocities_1_img, velocities_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
                 StorageImageUpdateInfo{"velocities_dst", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL}
 
             }
@@ -208,6 +195,22 @@ int main()
         new FlowTransitionSection(pressure_solve_image_usages)
     };
 
+
+
+    auto pressure_section = new FlowComputePushConstantSection(
+        fluid_context, "05_pressure", fluid_dispatch_size,
+        pressure_solve_image_usages,
+        vector<DescriptorUpdateInfo>{
+            StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+    SectionList pressure_solve_section_list(pressure_section);
+
+
+
     SectionList draw_section_list_2{
         new FlowComputeSection(
             fluid_context, "06_fix_divergence", fluid_dispatch_size,
@@ -217,8 +220,8 @@ int main()
                 FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types",  cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-                StorageImageUpdateInfo{"divergences",  divergence_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"pressures",  pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
@@ -247,18 +250,17 @@ int main()
         new FlowComputeSection(
             fluid_context, "09_particles", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{VELOCITIES_1,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_1,   usage_compute, ImageState{IMAGE_SAMPLER}},
                 FlowSectionImageUsage{PARTICLES, usage_compute, ImageState{IMAGE_STORAGE_RW}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
+                CombinedImageSamplerUpdateInfo{"velocities",  velocities_1_img, velocities_sampler, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         )
     };
-    // * Create a pipeline *
-    PipelineInfo pipeline_info{screen_width, screen_height, 1};
 
+    PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
     SectionList render_sections{
         new FlowGraphicsSection(
             fluid_context, "10_render", max_particle_count,
@@ -268,17 +270,16 @@ int main()
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
             },
-            pipeline_info, render_pass
+            render_pipeline_info, render_pass
         )
     };
-
-    SectionList pressure_solve_section_list(pressure_section);
 
     fluid_context.createDescriptorPool();
 
     draw_section_list_1.complete(images);
-    draw_section_list_2.complete(images);
     pressure_solve_section_list.complete(images);
+    draw_section_list_2.complete(images);
+    render_sections.complete(images);
 
     FlowCommandBuffer draw_buffer(command_pool);
     draw_buffer.record(images, draw_section_list_1, image_states);
@@ -287,10 +288,12 @@ int main()
     pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo());
     pressure_section->getPushConstantData().write("isEvenIteration", false);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, false);
-    pressure_section->getPushConstantData().write("isEvenIteration", false);
+    pressure_section->getPushConstantData().write("isEvenIteration", true);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, true);
 
-    draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
+    for (uint32_t i = 0; i < divergence_solve_iterations; i++){
+        draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
+    }
     
     draw_buffer.record(images, draw_section_list_2, image_states);
     
@@ -353,28 +356,24 @@ int main()
     queue.submit(init_buffer, frame_synchronization);
     frame_synchronization.waitFor(SYNC_FRAME);
 
-    
+    FlowCommandBuffer render_command_buffer(command_pool);
     while (window.running())
     {
         window.update();
         //camera.update(0.01f);
 
+
+        queue.submit(draw_buffer, frame_synchronization);
+        frame_synchronization.waitFor(SYNC_FRAME);
+
         //get current image to render into
         SwapchainImage swapchain_image = swapchain.acquireImage();
 
         // * Start recording a command buffer *
-        draw_command_buffer.startRecordPrimary();
-
-        //draw_command_buffer.cmdBindPipeline();
-        //draw_command_buffer.cmdDispatchCompute();
-        // * Set memory barrier *
-        /*draw_command_buffer.cmdBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,\
-            {color_image.createMemoryBarrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-             depth_image.createMemoryBarrier(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)});*/
-
-        // * Begin render pass and bind pipeline *    
-        draw_command_buffer.cmdBeginRenderPass(renderpass_settings, renderpass, swapchain_image.getFramebuffer());
-        //draw_command_buffer.cmdBindPipeline(copper_pipeline, copper_descriptor_sets);
+        render_command_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
+        render_command_buffer.record(images, render_sections, image_states, false, false);
+        render_command_buffer.cmdEndRenderPass();
         
         // * Write push constants *
         //MVP = projection * camera.view_matrix;
@@ -386,18 +385,17 @@ int main()
         //draw_command_buffer.cmdDrawVertices(copper_vertex_buffer.getSize() / sizeof(float) / 2);
 
         // * End render pass *
-        draw_command_buffer.cmdEndRenderPass();
-
-        draw_command_buffer.endRecord();
+        
+        render_command_buffer.endRecord();
         
         // * Submit command buffer and wait for it to finish*
-        queue.submit(draw_command_buffer, frame_synchronization);
+        queue.submit(render_command_buffer, frame_synchronization);
         frame_synchronization.waitFor(SYNC_FRAME);
         
         // * Present rendered image and reset buffer for next frame *
         swapchain.presentImage(swapchain_image, present_queue);
 
-        draw_command_buffer.resetBuffer(false);
+        render_command_buffer.resetBuffer(false);
     }    
     return 0;
 }
