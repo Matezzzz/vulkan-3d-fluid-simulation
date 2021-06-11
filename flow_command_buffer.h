@@ -7,8 +7,7 @@ class FlowCommandBuffer : public CommandBuffer{
 public:
     FlowCommandBuffer(CommandPool& command_pool) : CommandBuffer(command_pool.allocateBuffer())
     {}
-    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states,
-        bool loop = false, bool start_record = true, bool end_record = true)
+    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states, bool start_record = true, bool end_record = true)
     {
         for (auto& s : sections){
             s->complete(images);
@@ -16,28 +15,13 @@ public:
         vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
         if (start_record) startRecordPrimary();
-        if (loop){
-            for (int i = 0; i < images.size(); i++){
-                if (first_image_states[i] != image_states[i]){
-                    PRINT_ERROR("Image " << i << " is in wrong state for this command buffer. Required: " << first_image_states[i].toString() << ", Got: " << image_states[i].toString())
-                }
-            }
-        }else{
-            convertImagesToStartingConfig(images, first_image_states, image_states);
-        }
         
-        for (int i = 0; i < sections.size(); i++){
+        convertImagesToStartingConfig(images, first_image_states, image_states);
+        
+        for (const unique_ptr<FlowSection>& section : sections){
             //transition images to correct layouts if necessary
-            for (const FlowSectionImageUsage& img : sections[i]->m_images_used){
-                if (img.toImageState(true) != image_states[img.descriptor_index]){
-                    cmdBarrier(
-                        image_states[img.descriptor_index].last_use, img.usage_stages.from,
-                        images[img.descriptor_index].createMemoryBarrier(image_states[img.descriptor_index], img.state)
-                    );
-                    image_states[img.descriptor_index] = img.toImageState(false);
-                }
-            }
-            sections[i]->execute(*this);
+            section->transitionAllImages(*this, images, image_states);
+            section->execute(*this, image_states);
         }
         if (end_record) endRecord();
     }

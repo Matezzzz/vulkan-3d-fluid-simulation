@@ -68,7 +68,19 @@ public:
     {}
     virtual void initializeShader(DirectoryPipelinesContext&){}
     virtual void complete(const vector<ExtImage>&) = 0;
-    virtual void execute(CommandBuffer&) = 0;
+    virtual void execute(CommandBuffer&, vector<PipelineImageState>&) = 0;
+
+    void transitionAllImages(CommandBuffer& buffer, const vector<ExtImage>& images, vector<PipelineImageState>& image_states){
+         //transition images to correct layouts if necessary
+        for (const FlowSectionImageUsage& img : m_images_used){
+            //if (img.toImageState(true) != image_states[img.descriptor_index]){
+            buffer.cmdBarrier(
+                image_states[img.descriptor_index].last_use, img.usage_stages.from,
+                images[img.descriptor_index].createMemoryBarrier(image_states[img.descriptor_index], img.state)
+            );
+            image_states[img.descriptor_index] = img.toImageState(false);
+        }
+    }
 };
 
 
@@ -79,7 +91,7 @@ public:
     FlowTransitionSection(const vector<ImageState>& new_states) : FlowSection(createImageUsageVector(new_states))
     {}
     virtual void complete(const vector<ExtImage>&){}
-    virtual void execute(CommandBuffer&){}
+    virtual void execute(CommandBuffer&, vector<PipelineImageState>&){}
 private:
     vector<FlowSectionImageUsage> createImageUsageVector(const vector<ImageState>& new_states){
         vector<FlowSectionImageUsage> usg(new_states.size());
@@ -105,7 +117,7 @@ public:
     virtual void complete(const vector<ExtImage>& attachments){
         m_image = &attachments[m_images_used[0].descriptor_index];
     }
-    virtual void execute(CommandBuffer& buffer){
+    virtual void execute(CommandBuffer& buffer, vector<PipelineImageState>&){
         buffer.cmdClearColor(*m_image, ImageState{IMAGE_TRANSFER_DST}, m_clear_value.color);
     }
 };
@@ -117,10 +129,11 @@ class FlowComputeSection : public FlowSection{
     Size3 m_compute_size;
     
     vector<DescriptorUpdateInfo> m_descriptor_update_infos;
-    PipelineContext& m_context;
-
-    Pipeline m_pipeline;
+    
     DescriptorSet m_descriptor_set;
+protected:
+    PipelineContext& m_context;
+    Pipeline m_pipeline;
 public:
     FlowComputeSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
         FlowSection(usages), m_shader_dir_name(name), m_compute_size(compute_size), m_descriptor_update_infos(update_infos), m_context(ctx.getContext(m_shader_dir_name))
@@ -135,18 +148,45 @@ public:
         m_context.allocateDescriptorSets(m_descriptor_set);
         m_descriptor_set.updateDescriptorsV(m_descriptor_update_infos);
     }
-    virtual void execute(CommandBuffer& buffer){
+    virtual void execute(CommandBuffer& buffer, vector<PipelineImageState>&){
         buffer.cmdBindPipeline(m_pipeline, m_descriptor_set);
         buffer.cmdDispatchCompute(m_compute_size.x, m_compute_size.y, m_compute_size.z);
     }
 };
 
 
-class FlowComputeWithPushConstantsSection : public FlowComputeSection{
+class FlowComputePushConstantSection : public FlowComputeSection{
+    PushConstantData m_push_constant_data;
 public:
-    FlowComputeWithPushConstantsSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
-        FlowComputeSection(ctx, name, compute_size, usages, update_infos)
+    FlowComputePushConstantSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
+        FlowComputeSection(ctx, name, compute_size, usages, update_infos), m_push_constant_data(m_context.createPushConstantData())
     {}
+    PushConstantData& getPushConstantData(){
+        return m_push_constant_data;
+    }
+    virtual void execute(CommandBuffer& buffer, vector<PipelineImageState>& image_states){
+        buffer.cmdPushConstants(m_pipeline, m_push_constant_data);
+        FlowComputeSection::execute(buffer, image_states);
+    }
+};
+
+
+class FlowCommandSection : public FlowSection{
+    VkCommandBuffer m_buffer;
+    uint32_t m_iteration_count;
+    vector<FlowSectionImageUsage> m_last_usages;
+public:
+    FlowCommandSection(VkCommandBuffer commands, const vector<FlowSectionImageUsage>& first_usages, const vector<FlowSectionImageUsage>& last_usages, uint32_t iteration_count = 1) :
+        FlowSection(first_usages), m_buffer(commands), m_iteration_count(iteration_count), m_last_usages(last_usages)
+    {}
+    virtual void execute(CommandBuffer& buffer, vector<PipelineImageState>& image_states){
+        for (uint32_t i = 0; i < m_iteration_count; i++){
+            vkCmdExecuteCommands(buffer, 1, &m_buffer);
+        }
+        for (const FlowSectionImageUsage& img : m_last_usages){
+            image_states[img.descriptor_index] = img.toImageState(false);
+        }
+    }
 };
 
 
