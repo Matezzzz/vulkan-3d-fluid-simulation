@@ -18,7 +18,7 @@ public:
         for (const unique_ptr<FlowSection>& section : sections){
             //transition images to correct layouts if necessary
             section->transitionAllImages(*this, images, image_states);
-            section->execute(*this, image_states);
+            section->execute(*this);
         }
         if (end_record) endRecord();
     }

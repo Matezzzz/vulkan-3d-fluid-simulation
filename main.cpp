@@ -93,6 +93,17 @@ int main()
         CELL_AIR, CELL_WATER, CELL_SOLID
     };
 
+
+    // * Create a render pass *
+    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}.create();
+    // width, height, clear color, depth clear color
+    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.3f, 0.3f, 0.3f}, {1.f, 0U}}};
+
+    // * Create framebuffers for all swapchain images *
+    swapchain.createFramebuffers(render_pass);
+
+
+
     SectionList init_sections{
         new FlowClearColorSection(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
@@ -130,8 +141,6 @@ int main()
         }
     );
 
-
-    auto pressure_solve_section = new FlowCommandSection(VK_NULL_HANDLE, pressure_solve_image_usages, pressure_solve_image_usages, divergence_solve_iterations);
 
     SectionList draw_section_list_1{
         new FlowComputeSection(
@@ -247,8 +256,23 @@ int main()
             }
         )
     };
+    // * Create a pipeline *
+    PipelineInfo pipeline_info{screen_width, screen_height, 1};
 
-    SectionList pressure_solve_section_list(pressure_solve_section);
+    SectionList render_sections{
+        new FlowGraphicsSection(
+            fluid_context, "10_render", max_particle_count,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_R}},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
+            },
+            pipeline_info, render_pass
+        )
+    };
+
+    SectionList pressure_solve_section_list(pressure_section);
 
     fluid_context.createDescriptorPool();
 
@@ -265,11 +289,12 @@ int main()
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, false);
     pressure_section->getPushConstantData().write("isEvenIteration", false);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, true);
-    pressure_solve_section->setCommandBuffer(pressure_solve_buffer);
 
     draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
     
     draw_buffer.record(images, draw_section_list_2, image_states);
+    
+
     
 
 
@@ -301,17 +326,7 @@ int main()
     */
 
 
-    // * Managing push constant data *
-    //PushConstantData copper_push_constants = shader_ctx.createPushConstantData();
-
-    // * Create a render pass *
-    VkRenderPass renderpass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}.create();
-    // width, height, clear color, depth clear color
-    RenderPassSettings renderpass_settings{screen_width, screen_height, {{0.3f, 0.3f, 0.3f}, {1.f, 0U}}};
-
-    // * Create framebuffers for all swapchain images *
-    swapchain.createFramebuffers(renderpass);
-
+    
     // * Create standalone framebuffer *
     //VkFramebuffer render_framebuffer = FramebufferInfo(screen_width, screen_height, {color_image_view, depth_image.createView()}, renderpass).create();
 
