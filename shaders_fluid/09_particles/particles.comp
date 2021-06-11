@@ -3,8 +3,9 @@
 
 layout(local_size_x = 256) in;
 
-layout(set = 0, binding = 0, rgba32f) uniform image1D particles;
-layout(set = 0, binding = 1) uniform sampler3D velocities;
+layout(set = 0, binding = 0) uniform sampler3D velocities;
+layout(set = 0, binding = 1, rgba32f) uniform restrict image1D particles;
+
 
 const float time_delta = 0.01;
 

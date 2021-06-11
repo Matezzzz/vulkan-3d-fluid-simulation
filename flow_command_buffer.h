@@ -7,11 +7,8 @@ class FlowCommandBuffer : public CommandBuffer{
 public:
     FlowCommandBuffer(CommandPool& command_pool) : CommandBuffer(command_pool.allocateBuffer())
     {}
-    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState> image_states, bool start_record = true, bool end_record = true)
+    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_states, bool start_record = true, bool end_record = true)
     {
-        for (auto& s : sections){
-            s->complete(images);
-        }
         vector<PipelineImageState> first_image_states, last_image_states;
         getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
         if (start_record) startRecordPrimary();

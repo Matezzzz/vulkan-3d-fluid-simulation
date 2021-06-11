@@ -67,7 +67,7 @@ public:
     FlowSection(const vector<FlowSectionImageUsage>& usages) : m_images_used(usages)
     {}
     virtual void initializeShader(DirectoryPipelinesContext&){}
-    virtual void complete(const vector<ExtImage>&) = 0;
+    virtual void complete(const vector<ExtImage>&){};
     virtual void execute(CommandBuffer&, vector<PipelineImageState>&) = 0;
 
     void transitionAllImages(CommandBuffer& buffer, const vector<ExtImage>& images, vector<PipelineImageState>& image_states){
@@ -90,6 +90,8 @@ class FlowTransitionSection : public FlowSection{
 public:
     FlowTransitionSection(const vector<ImageState>& new_states) : FlowSection(createImageUsageVector(new_states))
     {}
+    FlowTransitionSection(const vector<FlowSectionImageUsage>& usages) : FlowSection(usages)
+    {}
     virtual void complete(const vector<ExtImage>&){}
     virtual void execute(CommandBuffer&, vector<PipelineImageState>&){}
 private:
@@ -109,7 +111,7 @@ private:
 
 class FlowClearColorSection : public FlowSection{
     VkClearValue m_clear_value;
-    const ExtImage* m_image;
+    const ExtImage* m_image = nullptr;
 public:
     FlowClearColorSection(int descriptor_index, VkClearValue clear_value) :
         FlowSection({FlowSectionImageUsage(descriptor_index, ImageUsageStage(VK_PIPELINE_STAGE_TRANSFER_BIT), ImageState{IMAGE_TRANSFER_DST})}), m_clear_value(clear_value)
@@ -187,6 +189,9 @@ public:
             image_states[img.descriptor_index] = img.toImageState(false);
         }
     }
+    void setCommandBuffer(VkCommandBuffer buffer){
+        m_buffer = buffer;
+    }
 };
 
 
@@ -197,6 +202,11 @@ public:
     SectionList(Args*... args){
         reserve(sizeof...(args));
         addSections(args...);
+    }
+    void complete(const vector<ExtImage>& images){
+        for (unique_ptr<FlowSection>& s : *this){
+            s->complete(images);
+        }
     }
 private:
     void addSections(){}

@@ -3,8 +3,8 @@
 
 layout(local_size_x = 256) in;
 
-layout(set = 0, binding = 0, r8i) uniform writeonly iimage3D cell_types;
-layout(set = 0, binding = 1, rgba32f) uniform readonly image1D particles;
+layout(set = 0, binding = 0, rgba32f) uniform  readonly  image1D particles;
+layout(set = 0, binding = 1, r8i)     uniform writeonly iimage3D cell_types;
 
 const int CELL_WATER = 1;
 
