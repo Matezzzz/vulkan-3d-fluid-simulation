@@ -17,11 +17,16 @@ string app_name = "Hello Vulkan :)";
 uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
 Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 Size3 fluid_local_group_size{128, 8, 1};
-Size3 particle_local_group_size{256, 1, 1};
 Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
-constexpr uint32_t max_particle_count = 65536;
-Size3 particle_dispatch_size = Size3{max_particle_count, 1, 1} / particle_local_group_size;
-constexpr uint32_t update_grid_local_x = 256;
+
+
+constexpr uint32_t particle_batch_count = 256;
+constexpr uint32_t particles_per_batch = 256;
+Size3 particle_local_group_size{particles_per_batch, 1, 1};
+constexpr uint32_t max_particle_count = particle_batch_count*particles_per_batch;
+Size3 particle_dispatch_size = Size3{particles_per_batch, particle_batch_count, 1} / particle_local_group_size;
+
+
 constexpr uint32_t divergence_solve_iterations = 100;
 
 
@@ -63,12 +68,12 @@ int main()
 
 
     // * Creating an image on the GPU *
-    ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     ExtImage velocities_1_img = velocity_image_info.create();
     ExtImage velocities_2_img = velocity_image_info.create();
-    ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    ExtImage particles_img = ImageInfo(max_particle_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
-    ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT);
+    ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage particles_img = ImageInfo(particles_per_batch, particle_batch_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
