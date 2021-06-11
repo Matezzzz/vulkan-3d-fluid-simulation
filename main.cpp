@@ -108,20 +108,7 @@ int main()
 
 
 
-    SectionList init_sections{
-        new FlowClearColorSection(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
-        new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
-        new FlowTransitionSection(
-            {ImageState{IMAGE_SAMPLER}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_W}, ImageState{IMAGE_STORAGE_R},
-             ImageState{IMAGE_STORAGE_RW}, ImageState{IMAGE_STORAGE_RW}, ImageState{IMAGE_NEWLY_CREATED}}
-        )
-    };
-    init_sections.complete(images);
-    FlowCommandBuffer init_buffer{command_pool};
-    init_buffer.record(images, init_sections, image_states);
+    
 
     DirectoryPipelinesContext fluid_context("shaders_fluid");
 
@@ -133,6 +120,20 @@ int main()
         FlowSectionImageUsage{PRESSURES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}},
         FlowSectionImageUsage{DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}}
     };
+    auto pressure_section = new FlowComputePushConstantSection(
+        fluid_context, "05_pressure", fluid_dispatch_size,
+        pressure_solve_image_usages,
+        vector<DescriptorUpdateInfo>{
+            StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+    SectionList pressure_solve_section_list(pressure_section);
+
+
+
 
     SectionList draw_section_list_1{
         new FlowComputeSection(
@@ -197,22 +198,12 @@ int main()
                 StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
-        new FlowTransitionSection(pressure_solve_image_usages)
+        new FlowIntoLoopTransitionSection(IMAGE_COUNT, pressure_solve_section_list)
     };
 
 
 
-    auto pressure_section = new FlowComputePushConstantSection(
-        fluid_context, "05_pressure", fluid_dispatch_size,
-        pressure_solve_image_usages,
-        vector<DescriptorUpdateInfo>{
-            StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
-        }
-    );
-    SectionList pressure_solve_section_list(pressure_section);
+    
 
 
 
@@ -266,7 +257,7 @@ int main()
     };
 
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
-    SectionList render_sections{
+    SectionList render_section_list{
         new FlowGraphicsSection(
             fluid_context, "10_render", max_particle_count,
             vector<FlowSectionImageUsage>{
@@ -279,18 +270,34 @@ int main()
         )
     };
 
+
+
+
+    SectionList init_sections{
+        new FlowClearColorSection(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
+        new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
+        new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
+    };
+    init_sections.complete(images);
+    FlowCommandBuffer init_buffer{command_pool};
+    init_buffer.record(images, init_sections, image_states);
+
+
     fluid_context.createDescriptorPool();
 
     draw_section_list_1.complete(images);
     pressure_solve_section_list.complete(images);
     draw_section_list_2.complete(images);
-    render_sections.complete(images);
+    render_section_list.complete(images);
 
     FlowCommandBuffer draw_buffer(command_pool);
     draw_buffer.record(images, draw_section_list_1, image_states);
 
     FlowCommandBuffer pressure_solve_buffer(command_pool);
-    pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo());
+    pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo(), VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     pressure_section->getPushConstantData().write("isEvenIteration", false);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, false);
     pressure_section->getPushConstantData().write("isEvenIteration", true);
@@ -377,7 +384,7 @@ int main()
         // * Start recording a command buffer *
         render_command_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
-        render_command_buffer.record(images, render_sections, image_states, false, false);
+        render_command_buffer.record(images, render_section_list, image_states, false, false);
         render_command_buffer.cmdEndRenderPass();
         
         // * Write push constants *

@@ -8,6 +8,12 @@ using std::unique_ptr;
 using std::make_unique;
 
 
+
+
+
+
+
+
 struct Size3{
     uint32_t x, y, z;
     Size3 operator/(const Size3& s) const{
@@ -86,24 +92,72 @@ public:
 
 
 
+
+class SectionList : public vector<unique_ptr<FlowSection>>{
+public:
+    template<typename... Args>
+    SectionList(Args*... args){
+        reserve(sizeof...(args));
+        addSections(args...);
+    }
+    void complete(const vector<ExtImage>& images){
+        for (unique_ptr<FlowSection>& s : *this){
+            s->complete(images);
+        }
+    }
+    void getLastImageStates(vector<PipelineImageState>& states) const{
+        for (const unique_ptr<FlowSection>& section : *this){
+            for (FlowSectionImageUsage img : section->m_images_used){
+                states[img.descriptor_index] = img.toImageState(false);
+            }
+        }
+    }
+private:
+    void addSections(){}
+    template<typename T, typename... Args>
+    void addSections(T* ptr, Args... args){
+        emplace_back(unique_ptr<T>(ptr));
+        addSections(args...);
+    }
+};
+
+
+
+
 class FlowTransitionSection : public FlowSection{
 public:
-    FlowTransitionSection(const vector<ImageState>& new_states) : FlowSection(createImageUsageVector(new_states))
-    {}
     FlowTransitionSection(const vector<FlowSectionImageUsage>& usages) : FlowSection(usages)
     {}
     virtual void complete(const vector<ExtImage>&){}
     virtual void execute(CommandBuffer&){}
-private:
-    vector<FlowSectionImageUsage> createImageUsageVector(const vector<ImageState>& new_states){
-        vector<FlowSectionImageUsage> usg(new_states.size());
-        for (int i = 0; i < usg.size(); i++){
-            usg[i] = FlowSectionImageUsage(i, ImageUsageStage(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT), new_states[i]);
-        }
-        return usg;
-    }
 };
 
+
+class FlowIntoLoopTransitionSection : public FlowTransitionSection{
+public:
+    template<typename... Args>
+    FlowIntoLoopTransitionSection(int img_count, const Args&... args) : FlowTransitionSection(getImageUsages(img_count, args...))
+    {}
+private:
+    template<typename... Args>
+    vector<FlowSectionImageUsage> getImageUsages(int img_count, const Args&... args){
+        vector<PipelineImageState> all_image_states(img_count);
+        fillImageUsages(all_image_states, args...);
+        vector<FlowSectionImageUsage> image_usages;
+        for (int i = 0; i < img_count; i++){
+            if (all_image_states[i].layout != VK_IMAGE_LAYOUT_UNDEFINED){
+                image_usages.push_back(FlowSectionImageUsage{i, ImageUsageStage{all_image_states[i].last_use}, all_image_states[i]});
+            }
+        }
+        return image_usages;
+    }
+    void fillImageUsages(vector<PipelineImageState>&){}
+    template<typename... Args>
+    void fillImageUsages(vector<PipelineImageState>& usages, const SectionList& l, const Args&... args){
+        l.getLastImageStates(usages);
+        fillImageUsages(usages, args...);
+    }
+};
 
 
 
@@ -214,27 +268,6 @@ public:
 
 
 
-
-class SectionList : public vector<unique_ptr<FlowSection>>{
-public:
-    template<typename... Args>
-    SectionList(Args*... args){
-        reserve(sizeof...(args));
-        addSections(args...);
-    }
-    void complete(const vector<ExtImage>& images){
-        for (unique_ptr<FlowSection>& s : *this){
-            s->complete(images);
-        }
-    }
-private:
-    void addSections(){}
-    template<typename T, typename... Args>
-    void addSections(T* ptr, Args... args){
-        emplace_back(unique_ptr<T>(ptr));
-        addSections(args...);
-    }
-};
 
 
 
