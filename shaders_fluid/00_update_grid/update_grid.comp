@@ -1,15 +1,15 @@
 #version 450
 #extension GL_EXT_samplerless_texture_functions : require
 
-layout(local_size_x = 256) in;
+layout(local_size_x = 256, local_size_y = 1) in;
 
-layout(set = 0, binding = 0, rgba32f) uniform  readonly  image1D particles;
+layout(set = 0, binding = 0, rgba32f) uniform  readonly  image2D particles;
 layout(set = 0, binding = 1, r8ui)     uniform writeonly uimage3D cell_types;
 
 const int CELL_WATER = 1;
 
 void main(){
-    uint i = gl_GlobalInvocationID.x;
-    ivec3 pos = ivec3(imageLoad(particles, int(i)).xyz);
+    ivec2 i = ivec2(gl_GlobalInvocationID.xy);
+    ivec3 pos = ivec3(imageLoad(particles, i).xyz);
     imageStore(cell_types, pos, ivec4(CELL_WATER, 0, 0, 0));
 }

@@ -1,18 +1,18 @@
 #version 450
 #extension GL_EXT_samplerless_texture_functions : require
 
-layout(local_size_x = 256) in;
+layout(local_size_x = 256, local_size_y = 1) in;
 
 layout(set = 0, binding = 0) uniform sampler3D velocities;
-layout(set = 0, binding = 1, rgba32f) uniform restrict image1D particles;
+layout(set = 0, binding = 1, rgba32f) uniform restrict image2D particles;
 
 
 const float time_delta = 0.01;
 
 
 void main(){
-    int i = int(gl_GlobalInvocationID.x);
-    vec3 pos = imageLoad(particles, int(i)).xyz;
+    ivec2 i = ivec2(gl_GlobalInvocationID.xy);
+    vec3 pos = imageLoad(particles, i).xyz;
     vec3 v = texture(velocities, pos).xyz;
     imageStore(particles, i, vec4(pos + v*time_delta, 0.0));
 }
