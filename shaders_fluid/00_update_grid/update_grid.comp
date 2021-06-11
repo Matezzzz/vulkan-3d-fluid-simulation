@@ -10,6 +10,8 @@ const int CELL_WATER = 1;
 
 void main(){
     ivec2 i = ivec2(gl_GlobalInvocationID.xy);
-    ivec3 pos = ivec3(imageLoad(particles, i).xyz);
-    imageStore(cell_types, pos, ivec4(CELL_WATER, 0, 0, 0));
+    vec4 pos = imageLoad(particles, i);
+    if (pos.w == 1.0){
+        imageStore(cell_types, ivec3(pos.xyz), ivec4(CELL_WATER, 0, 0, 0));
+    }
 }

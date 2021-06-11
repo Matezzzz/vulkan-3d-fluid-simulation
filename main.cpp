@@ -59,6 +59,7 @@ int main()
     
     // * Create command pool and default command buffer *
     CommandPool command_pool = CommandPoolInfo{0}.create();
+    CommandPool render_command_pool = CommandPoolInfo{0, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT}.create();
 
     // * Create local object creator -  used to copy data from RAM to GPU * 
     //uint32_t image_width = 1024;
@@ -81,7 +82,7 @@ int main()
 
 
 
-    VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).create();
+    VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().create();
 
     enum Attachments{
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
@@ -99,7 +100,7 @@ int main()
 
 
     // * Create a render pass *
-    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}.create();
+    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
     // width, height, clear color, depth clear color
     RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.3f, 0.3f, 0.3f}, {1.f, 0U}}};
 
@@ -134,8 +135,8 @@ int main()
 
 
 
-
     SectionList draw_section_list_1{
+        new FlowClearColorSection(CELL_TYPES, ClearValue(0)),
         new FlowComputeSection(
             fluid_context, "00_update_grid", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
@@ -201,12 +202,6 @@ int main()
         new FlowIntoLoopTransitionSection(IMAGE_COUNT, pressure_solve_section_list)
     };
 
-
-
-    
-
-
-
     SectionList draw_section_list_2{
         new FlowComputeSection(
             fluid_context, "06_fix_divergence", fluid_dispatch_size,
@@ -250,26 +245,24 @@ int main()
                 FlowSectionImageUsage{PARTICLES, usage_compute, ImageState{IMAGE_STORAGE_RW}},
             },
             vector<DescriptorUpdateInfo>{
-                CombinedImageSamplerUpdateInfo{"velocities",  velocities_1_img, velocities_sampler, VK_IMAGE_LAYOUT_GENERAL},
+                CombinedImageSamplerUpdateInfo{"velocities",  velocities_1_img, velocities_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         )
     };
 
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
-    SectionList render_section_list{
-        new FlowGraphicsSection(
-            fluid_context, "10_render", max_particle_count,
-            vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_R}},
-            },
-            vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
-            },
-            render_pipeline_info, render_pass
-        )
-    };
-
+    auto render_section = new FlowGraphicsSection(
+        fluid_context, "10_render", max_particle_count,
+        vector<FlowSectionImageUsage>{
+            FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_R}},
+        },
+        vector<DescriptorUpdateInfo>{
+            StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
+        },
+        render_pipeline_info, render_pass
+    );
+    SectionList render_section_list(render_section);
 
 
 
@@ -283,8 +276,9 @@ int main()
     };
     init_sections.complete(images);
     FlowCommandBuffer init_buffer{command_pool};
+    init_buffer.startRecordPrimary();
     init_buffer.record(images, init_sections, image_states);
-
+    init_buffer.endRecord();
 
     fluid_context.createDescriptorPool();
 
@@ -294,20 +288,23 @@ int main()
     render_section_list.complete(images);
 
     FlowCommandBuffer draw_buffer(command_pool);
+    draw_buffer.startRecordPrimary();
     draw_buffer.record(images, draw_section_list_1, image_states);
 
-    FlowCommandBuffer pressure_solve_buffer(command_pool);
+    FlowCommandBuffer pressure_solve_buffer(command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo(), VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     pressure_section->getPushConstantData().write("isEvenIteration", false);
-    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, false);
+    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
     pressure_section->getPushConstantData().write("isEvenIteration", true);
-    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states, false, true);
+    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
+    pressure_solve_buffer.endRecord();
 
     for (uint32_t i = 0; i < divergence_solve_iterations; i++){
         draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
     }
     
     draw_buffer.record(images, draw_section_list_2, image_states);
+    draw_buffer.endRecord();
     
 
     
@@ -368,7 +365,7 @@ int main()
     queue.submit(init_buffer, frame_synchronization);
     frame_synchronization.waitFor(SYNC_FRAME);
 
-    FlowCommandBuffer render_command_buffer(command_pool);
+    FlowCommandBuffer render_command_buffer(render_command_pool);
     while (window.running())
     {
         window.update();
@@ -383,9 +380,14 @@ int main()
 
         // * Start recording a command buffer *
         render_command_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+        render_command_buffer.cmdBarrier(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            swapchain_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_COLOR_ATTACHMENT})
+        );
+        render_section->transitionAllImages(render_command_buffer, images, image_states);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
-        render_command_buffer.record(images, render_section_list, image_states, false, false);
+        render_section->execute(render_command_buffer);
         render_command_buffer.cmdEndRenderPass();
+        render_command_buffer.endRecord();
         
         // * Write push constants *
         //MVP = projection * camera.view_matrix;
@@ -395,12 +397,10 @@ int main()
         // * Bind vertex buffers and draw *
         //draw_command_buffer.cmdBindVertexBuffers({copper_vertex_buffer});
         //draw_command_buffer.cmdDrawVertices(copper_vertex_buffer.getSize() / sizeof(float) / 2);
-
-        // * End render pass *
         
-        render_command_buffer.endRecord();
         
         // * Submit command buffer and wait for it to finish*
+        swapchain.prepareToDraw();
         queue.submit(render_command_buffer, frame_synchronization);
         frame_synchronization.waitFor(SYNC_FRAME);
         
@@ -408,6 +408,7 @@ int main()
         swapchain.presentImage(swapchain_image, present_queue);
 
         render_command_buffer.resetBuffer(false);
-    }    
+    }
+    queue.waitFor();
     return 0;
 }

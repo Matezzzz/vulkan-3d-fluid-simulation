@@ -5,22 +5,19 @@
 
 class FlowCommandBuffer : public CommandBuffer{
 public:
-    FlowCommandBuffer(CommandPool& command_pool) : CommandBuffer(command_pool.allocateBuffer())
+    FlowCommandBuffer(CommandPool& command_pool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) : CommandBuffer(command_pool.allocateBuffer(level))
     {}
-    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_states, bool start_record = true, bool end_record = true)
+    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_states)
     {
-        vector<PipelineImageState> first_image_states, last_image_states;
-        getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);
-        if (start_record) startRecordPrimary();
-        
-        convertImagesToStartingConfig(images, first_image_states, image_states);
+        //vector<PipelineImageState> first_image_states, last_image_states;
+        //getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);        
+        //convertImagesToStartingConfig(images, first_image_states, image_states);
         
         for (const unique_ptr<FlowSection>& section : sections){
             //transition images to correct layouts if necessary
             section->transitionAllImages(*this, images, image_states);
             section->execute(*this);
         }
-        if (end_record) endRecord();
     }
 private:
     void getStartingAndEndingImageStates(int image_count, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
