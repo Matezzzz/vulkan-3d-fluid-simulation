@@ -82,7 +82,7 @@ int main()
 
 
 
-    VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().create();
+    VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
@@ -145,6 +145,15 @@ int main()
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
+            }
+        ),
+        new FlowComputeSection(
+            fluid_context, "00a_update_borders", fluid_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
+            },
+            vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
             }
         ),
@@ -271,16 +280,27 @@ int main()
         new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
         new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
+        new FlowComputeSection(
+            fluid_context, "000_init_particles", Size3{1, 1, 1},
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_W}},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
+            }
+        ),
         new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
         new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
     };
+
+    fluid_context.createDescriptorPool();
+
+
     init_sections.complete(images);
     FlowCommandBuffer init_buffer{command_pool};
     init_buffer.startRecordPrimary();
     init_buffer.record(images, init_sections, image_states);
-    init_buffer.endRecord();
-
-    fluid_context.createDescriptorPool();
+    init_buffer.endRecord();    
 
     draw_section_list_1.complete(images);
     pressure_solve_section_list.complete(images);

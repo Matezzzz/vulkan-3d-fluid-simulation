@@ -1,5 +1,4 @@
 #version 450
-#extension GL_EXT_samplerless_texture_functions : require
 
 layout(local_size_x = 256, local_size_y = 1) in;
 
@@ -14,7 +13,7 @@ void main(){
     ivec2 i = ivec2(gl_GlobalInvocationID.xy);
     vec4 pos = imageLoad(particles, i);
     if (pos.w == 1.0){
-        vec3 v = texture(velocities, pos).xyz;
+        vec3 v = texture(velocities, pos.xyz).xyz;
         imageStore(particles, i, vec4(pos.xyz + v*time_delta, 1.0));
     }
 }
