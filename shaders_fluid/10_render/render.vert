@@ -16,6 +16,7 @@ void main(){
     if (pos.w == 1.0){
         gl_Position = vec4(pos.xy / 10.0 - vec2(1.0, 1.0), 0.0, 1.0); //MVP * vec4(pos, 1.0);
         gl_PointSize = 20 / pos.z;
+        should_discard = 0.0;
     }else{
         should_discard = 1.0;
     }

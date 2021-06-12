@@ -7,7 +7,7 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 
 const int CELL_WATER = 1;
 const float time_delta = 0.01;
-const float gravity = 1;
+const float gravity = 10;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);

@@ -102,7 +102,7 @@ int main()
     // * Create a render pass *
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
     // width, height, clear color, depth clear color
-    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.3f, 0.3f, 0.3f}, {1.f, 0U}}};
+    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
 
     // * Create framebuffers for all swapchain images *
     swapchain.createFramebuffers(render_pass);
@@ -117,18 +117,18 @@ int main()
 
     vector<FlowSectionImageUsage> pressure_solve_image_usages{
         FlowSectionImageUsage{CELL_TYPES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
+        FlowSectionImageUsage{DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}},
         FlowSectionImageUsage{PRESSURES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
         FlowSectionImageUsage{PRESSURES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}},
-        FlowSectionImageUsage{DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}}
     };
     auto pressure_section = new FlowComputePushConstantSection(
         fluid_context, "05_pressure", fluid_dispatch_size,
         pressure_solve_image_usages,
         vector<DescriptorUpdateInfo>{
             StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
             StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
-            StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
         }
     );
     SectionList pressure_solve_section_list(pressure_section);
@@ -216,7 +216,7 @@ int main()
             fluid_context, "06_fix_divergence", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowSectionImageUsage{DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{PRESSURES_2,  usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
             },
             vector<DescriptorUpdateInfo>{
@@ -261,6 +261,7 @@ int main()
     };
 
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
+    render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
     auto render_section = new FlowGraphicsSection(
         fluid_context, "10_render", max_particle_count,
         vector<FlowSectionImageUsage>{
@@ -280,6 +281,9 @@ int main()
         new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
         new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
+        new FlowClearColorSection( PRESSURES_2, ClearValue(0.f)),
+        new FlowClearColorSection( DIVERGENCES, ClearValue(0.f)),
         new FlowComputeSection(
             fluid_context, "000_init_particles", Size3{1, 1, 1},
             vector<FlowSectionImageUsage>{
@@ -289,7 +293,6 @@ int main()
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
-        new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
         new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
     };
 

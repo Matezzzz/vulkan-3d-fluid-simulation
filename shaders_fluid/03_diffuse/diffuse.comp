@@ -9,7 +9,7 @@ layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D velocit
 
 const int CELL_WATER = 1;
 const float time_delta = 0.01;
-const float diffuse_a = 0.005;
+const float diffuse_a = 0.00;
 const float diffuse_b = 1.0 - 6 * diffuse_a;
 
 

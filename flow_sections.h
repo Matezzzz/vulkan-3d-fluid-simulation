@@ -237,15 +237,14 @@ public:
 
 class FlowGraphicsSection : public FlowSimplePipelineSection{
     uint32_t m_vertex_count;
-    uint32_t m_instance_count;
 public:
     FlowGraphicsSection(DirectoryPipelinesContext& ctx, const string& name, uint32_t vertex_count, const vector<FlowSectionImageUsage>& usages,
             const vector<DescriptorUpdateInfo>& update_infos, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0) :
-        FlowSimplePipelineSection(ctx, name, usages, update_infos, pipeline_info, render_pass, subpass_index), m_vertex_count(vertex_count), m_instance_count(1)
+        FlowSimplePipelineSection(ctx, name, usages, update_infos, pipeline_info, render_pass, subpass_index), m_vertex_count(vertex_count)
     {}
     virtual void execute(CommandBuffer& buffer){
         FlowSimplePipelineSection::execute(buffer);
-        //buffer.cmdDrawVertices();
+        buffer.cmdDrawVertices(m_vertex_count);
     }
 };
 
@@ -260,7 +259,7 @@ public:
     PushConstantData& getPushConstantData(){
         return m_push_constant_data;
     }
-    virtual void execute(CommandBuffer& buffer, vector<PipelineImageState>& image_states){
+    virtual void execute(CommandBuffer& buffer){
         buffer.cmdPushConstants(m_pipeline, m_push_constant_data);
         FlowComputeSection::execute(buffer);
     }
