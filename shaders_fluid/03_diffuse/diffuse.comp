@@ -1,6 +1,6 @@
 #version 450
 
-layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, r8ui)    uniform restrict readonly uimage3D cell_types;
 layout(set = 0, binding = 1, rgba32f) uniform restrict readonly  image3D velocities_src;
@@ -16,11 +16,12 @@ const float diffuse_b = 1.0 - 6 * diffuse_a;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    vec3 velocity = imageLoad(velocities_src, i).xyz;
     if (imageLoad(cell_types, i).x == CELL_WATER){
-        vec3 velocity = diffuse_b * imageLoad(velocities_src, i).xyz + diffuse_a *
+        vec3 velocity = diffuse_b * velocity + diffuse_a *
             (imageLoad(velocities_src, i + ivec3(1, 0, 0)).xyz + imageLoad(velocities_src, i + ivec3(-1, 0, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 1, 0)).xyz + imageLoad(velocities_src, i + ivec3(0, -1, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 0, 1)).xyz + imageLoad(velocities_src, i + ivec3(0, 0, -1)).xyz);
-        imageStore(velocities_dst, i, vec4(velocity, 0.0));
     }
+    imageStore(velocities_dst, i, vec4(velocity, 0.0));
 }

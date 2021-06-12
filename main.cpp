@@ -14,9 +14,9 @@ string app_name = "Hello Vulkan :)";
 
 
 
-uint32_t fluid_width = 128, fluid_height = 128, fluid_depth = 3;
+uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 3;
 Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
-Size3 fluid_local_group_size{128, 8, 1};
+Size3 fluid_local_group_size{10, 10, 1};
 Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 
 
@@ -26,6 +26,7 @@ Size3 particle_local_group_size{particles_per_batch, 1, 1};
 constexpr uint32_t max_particle_count = particle_batch_count*particles_per_batch;
 Size3 particle_dispatch_size = Size3{particles_per_batch, particle_batch_count, 1} / particle_local_group_size;
 
+const float pressure_air = 1.0;
 
 constexpr uint32_t divergence_solve_iterations = 100;
 
@@ -208,7 +209,9 @@ int main()
                 StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
-        new FlowIntoLoopTransitionSection(IMAGE_COUNT, pressure_solve_section_list)
+        new FlowClearColorSection(PRESSURES_1, ClearValue(pressure_air)),
+        new FlowClearColorSection(PRESSURES_2, ClearValue(pressure_air)),
+        //new FlowIntoLoopTransitionSection(IMAGE_COUNT, pressure_solve_section_list)
     };
 
     SectionList draw_section_list_2{
@@ -285,7 +288,7 @@ int main()
         new FlowClearColorSection( PRESSURES_2, ClearValue(0.f)),
         new FlowClearColorSection( DIVERGENCES, ClearValue(0.f)),
         new FlowComputeSection(
-            fluid_context, "000_init_particles", Size3{1, 1, 1},
+            fluid_context, "000_init_particles", Size3{10, 10, 1},
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_W}},
             },

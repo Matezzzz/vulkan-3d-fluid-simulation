@@ -1,6 +1,6 @@
 #version 450
 
-layout(local_size_x = 128, local_size_y = 8, local_size_z = 1) in;
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, r8ui)     uniform readonly restrict uimage3D cell_types;
 layout(set = 0, binding = 1)          uniform sampler3D velocities_src_sampler;
@@ -15,6 +15,8 @@ void main(){
     uint type = imageLoad(cell_types, i).x;
     if (type == CELL_WATER || type == CELL_AIR){
         vec3 pos = vec3(i) - texelFetch(velocities_src_sampler, i, 0).xyz * time_delta;
-        imageStore(velocities_dst, i, texture(velocities_src_sampler, pos));
+        imageStore(velocities_dst, i, texture(velocities_src_sampler, pos + vec3(0.5, 0.5, 0.5)));
+    }else{
+        imageStore(velocities_dst, i, vec4(0, 0, 0, 0));
     }
 }
