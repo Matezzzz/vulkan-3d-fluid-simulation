@@ -9,9 +9,9 @@ layout(set = 0, binding = 3, r32f) uniform restrict image3D pressures_2;
 
 
 
-const uint CELL_AIR = 0;
-const uint CELL_WATER = 1;
-const uint CELL_SOLID = 2;
+const uint CELL_AIR = 1;
+const uint CELL_WATER = 2;
+const uint CELL_SOLID = 3;
 
 const float pressure_air = 1;
 const float fluid_density = 1;
@@ -45,7 +45,7 @@ search_neighbor(tex_in, ivec3(0, 0, 1))\
 search_neighbor(tex_in, ivec3(-1, 0, 0))\
 search_neighbor(tex_in, ivec3(0, -1, 0))\
 search_neighbor(tex_in, ivec3(0, 0, -1))\
-imageStore(tex_out, i, vec4(s / aii, 0, 0, 0));
+imageStore(tex_out, i, vec4(-s / aii, 0, 0, 0));
 
 
 void main(){

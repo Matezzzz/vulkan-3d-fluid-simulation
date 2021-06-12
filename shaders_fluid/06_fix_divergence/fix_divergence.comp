@@ -7,7 +7,7 @@ layout(set = 0, binding = 1, r32f)    uniform restrict image3D pressures;
 layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
 
 
-const int CELL_WATER = 1;
+const int CELL_WATER = 2;
 
 const float fluid_density = 1;
 const float time_delta = 0.01;

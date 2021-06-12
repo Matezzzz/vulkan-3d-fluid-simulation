@@ -6,13 +6,14 @@ layout(set = 0, binding = 0, r8ui)     uniform readonly restrict uimage3D cell_t
 layout(set = 0, binding = 1)          uniform sampler3D velocities_src_sampler;
 layout(set = 0, binding = 2, rgba32f) uniform writeonly restrict image3D velocities_dst;
 
-
-const int CELL_WATER = 1;
+const uint CELL_AIR = 1;
+const uint CELL_WATER = 2;
 const float time_delta = 0.01;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    if (imageLoad(cell_types, i).x == CELL_WATER){
+    uint type = imageLoad(cell_types, i).x;
+    if (type == CELL_WATER || type == CELL_AIR){
         vec3 pos = vec3(i) - texelFetch(velocities_src_sampler, i, 0).xyz * time_delta;
         imageStore(velocities_dst, i, texture(velocities_src_sampler, pos));
     }

@@ -7,7 +7,7 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict readonly  image3D velocit
 layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D velocities_dst;
 
 
-const int CELL_WATER = 1;
+const int CELL_WATER = 2;
 const float time_delta = 0.01;
 const float diffuse_a = 0.00;
 const float diffuse_b = 1.0 - 6 * diffuse_a;

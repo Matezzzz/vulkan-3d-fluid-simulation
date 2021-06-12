@@ -95,7 +95,7 @@ int main()
     vector<PipelineImageState> image_states(IMAGE_COUNT);
 
     enum CellTypes{
-        CELL_AIR, CELL_WATER, CELL_SOLID
+        CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
     };
 
 
@@ -136,7 +136,7 @@ int main()
 
 
     SectionList draw_section_list_1{
-        new FlowClearColorSection(CELL_TYPES, ClearValue(0)),
+        new FlowClearColorSection(CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
             fluid_context, "00_update_grid", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
@@ -151,7 +151,7 @@ int main()
         new FlowComputeSection(
             fluid_context, "00a_update_borders", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
@@ -279,7 +279,7 @@ int main()
     SectionList init_sections{
         new FlowClearColorSection(VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection(VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_AIR)),
+        new FlowClearColorSection(  CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowClearColorSection(   PARTICLES, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection( PRESSURES_1, ClearValue(0.f)),
         new FlowClearColorSection( PRESSURES_2, ClearValue(0.f)),
@@ -314,16 +314,18 @@ int main()
     draw_buffer.startRecordPrimary();
     draw_buffer.record(images, draw_section_list_1, image_states);
 
-    FlowCommandBuffer pressure_solve_buffer(command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+    /*FlowCommandBuffer pressure_solve_buffer(command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
     pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo(), VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
     pressure_section->getPushConstantData().write("isEvenIteration", false);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
     pressure_section->getPushConstantData().write("isEvenIteration", true);
     pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
-    pressure_solve_buffer.endRecord();
+    pressure_solve_buffer.endRecord();*/
 
     for (uint32_t i = 0; i < divergence_solve_iterations; i++){
-        draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
+        //draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
+        pressure_section->getPushConstantData().write("isEvenIteration", (i % 2 == 0));
+        draw_buffer.record(images, pressure_solve_section_list, image_states);
     }
     
     draw_buffer.record(images, draw_section_list_2, image_states);

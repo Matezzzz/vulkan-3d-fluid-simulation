@@ -6,7 +6,6 @@ layout(set = 0, binding = 0, r8ui)     uniform restrict readonly uimage3D cell_t
 layout(set = 0, binding = 1, rgba32f) uniform restrict readonly image3D velocities;
 layout(set = 0, binding = 2, r32f)    uniform restrict writeonly image3D divergences;
 
-const int CELL_SOLID = 2;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
