@@ -9,7 +9,7 @@ const uint CELL_SOLID = 2;
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     ivec3 b = imageSize(cell_types) - ivec3(1, 1, 1);
-    if ((i.x == 0 || i.x == b.x) && (i.y == 0 || i.y == b.y) && (i.z == 0 || i.z == b.z)){
+    if ((i.x == 0 || i.x == b.x) || (i.y == 0 || i.y == b.y) || (i.z == 0 || i.z == b.z)){
         imageStore(cell_types, i, uvec4(CELL_SOLID, 0, 0, 0));
     }
 }

@@ -7,11 +7,11 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 
 const int CELL_WATER = 1;
 const float time_delta = 0.01;
-const float gravity = -1;
+const float gravity = 1;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     if (imageLoad(cell_types, i).x == CELL_WATER){
-        imageStore(velocities, i, imageLoad(velocities, i) + time_delta*vec4(0, 0, gravity, 0));
+        imageStore(velocities, i, imageLoad(velocities, i) + time_delta*vec4(0, gravity, 0, 0));
     }
 }
