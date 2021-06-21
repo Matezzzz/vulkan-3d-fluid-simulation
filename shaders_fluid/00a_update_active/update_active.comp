@@ -9,7 +9,7 @@ const uint CELL_WATER = 2;
 const uint CELL_SOLID = 3;
  
 
-#define functionInAllDirections(func, op) func(ivec3(1, 0, 0)) op func(ivec3(0, 1, 0)) op func(ivec3(0, 0, 1)) op func(ivec3(-1, 0, 0)) op func(ivec3(0, -1, 0)) op func(ivec3(0, 0, -1))
+#define functionInAllDirections(func, op) (func(ivec3(1, 0, 0)) op func(ivec3(0, 1, 0)) op func(ivec3(0, 0, 1)) op func(ivec3(-1, 0, 0)) op func(ivec3(0, -1, 0)) op func(ivec3(0, 0, -1)))
 
 #define waterAt(move) isWater(cellAt(i + move))
 

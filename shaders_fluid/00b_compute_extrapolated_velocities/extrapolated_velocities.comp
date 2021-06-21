@@ -1,0 +1,38 @@
+#version 450
+
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r8ui) uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 1, rgba32f) uniform restrict readonly image3D velocities;
+layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D extrapolated_velocities;
+
+const uint CELL_WATER = 2;
+
+uint cellAt(ivec3 pos){
+    return imageLoad(cell_types, pos).x;
+}
+bool isWater(uint a){
+    return (a == CELL_WATER);
+}
+
+vec3 getExtrapolatedVelocity(ivec3 i){
+    int c = 0;
+    vec4 v = vec4(0, 0, 0, 0);
+    ivec3 b = imageSize(velocities) - ivec3(1, 1, 1);
+
+    if (i.x != 0   && isWater(cellAt(i - ivec3(1, 0, 0)))){ v += imageLoad(velocities, i - ivec3(1, 0, 0)); c++; }
+    if (i.y != 0   && isWater(cellAt(i - ivec3(0, 1, 0)))){ v += imageLoad(velocities, i - ivec3(0, 1, 0)); c++; }
+    if (i.z != 0   && isWater(cellAt(i - ivec3(0, 0, 1)))){ v += imageLoad(velocities, i - ivec3(0, 0, 1)); c++; }
+    if (i.x != b.x && isWater(cellAt(i + ivec3(1, 0, 0)))){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+    if (i.y != b.y && isWater(cellAt(i + ivec3(0, 1, 0)))){ v += imageLoad(velocities, i + ivec3(0, 1, 0)); c++; }
+    if (i.z != b.z && isWater(cellAt(i + ivec3(0, 0, 1)))){ v += imageLoad(velocities, i + ivec3(0, 0, 1)); c++; }
+    if (c != 0) return v.xyz / c;
+    return vec3(0, 0, 0);
+}
+
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    imageStore(extrapolated_velocities, i, vec4(getExtrapolatedVelocity(i), 0.0));      
+}
+

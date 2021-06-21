@@ -19,24 +19,27 @@ uint cellAt(ivec3 i){
 bool isActive(uint type){
     return (type == CELL_AIR || type == CELL_WATER);
 }
+bool isWater(uint type){
+    return (type == CELL_WATER);
+}
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    vec3 velocity = vec3(0, 0, 0);
+    vec3 velocity = texture(velocities_src_sampler, vec3(i) + vec3(0.5, 0.5, 0.5)).xyz;
     uint local_type = cellAt(i);
 
-    bool cur_active = isActive(local_type);
-    if (i.x != 0 && (cur_active || isActive(cellAt(i - ivec3(1, 0, 0))))){
+    bool cur_active = isWater(local_type);
+    if (i.x != 0 && (cur_active || isWater(cellAt(i - ivec3(1, 0, 0))))){
         vec3 pos_in_tex = vec3(i) + vec3(0, 0.5, 0.5);
         vec3 cur_v = texture(velocities_src_sampler, pos_in_tex).xyz;
         velocity.x = texture(velocities_src_sampler, pos_in_tex - cur_v*time_delta).x;
     }
-    if (i.y != 0 && (cur_active || isActive(cellAt(i - ivec3(0, 1, 0))))){
+    if (i.y != 0 && (cur_active || isWater(cellAt(i - ivec3(0, 1, 0))))){
         vec3 pos_in_tex = vec3(i) + vec3(0.5, 0, 0.5);
         vec3 cur_v = texture(velocities_src_sampler, pos_in_tex).xyz;
         velocity.y = texture(velocities_src_sampler, pos_in_tex - cur_v*time_delta).y;
     }
-    if (i.z != 0 && (cur_active || isActive(cellAt(i - ivec3(1, 0, 0))))){
+    if (i.z != 0 && (cur_active || isWater(cellAt(i - ivec3(1, 0, 0))))){
         vec3 pos_in_tex = vec3(i) + vec3(0.5, 0.5, 0);
         vec3 cur_v = texture(velocities_src_sampler, pos_in_tex).xyz;
         velocity.z = texture(velocities_src_sampler, pos_in_tex - cur_v*time_delta).z;

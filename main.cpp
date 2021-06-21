@@ -144,7 +144,7 @@ int main()
             fluid_context, "00_update_grid", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
+                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
@@ -152,7 +152,7 @@ int main()
             }
         ),
         new FlowComputeSection(
-            fluid_context, "00a_update_active", particle_dispatch_size,
+            fluid_context, "00a_update_active", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
             },
@@ -161,26 +161,41 @@ int main()
             }
         ),
         new FlowComputeSection(
-            fluid_context, "00b_extrapolate_velocities", particle_dispatch_size,
+            fluid_context, "00b_compute_extrapolated_velocities", fluid_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}}
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"extrapolated_velocities", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
+            }
+        ),
+        new FlowComputeSection(
+            fluid_context, "00c_extrapolate_velocities", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}}
+                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_R}}
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"new_cell_types",  cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"extrapolated_velocitites", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
         new FlowComputeSection(
-            fluid_context, "00c_update_cell_types", fluid_dispatch_size,
+            fluid_context, "00d_update_cell_types", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"new_cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"new_cell_types", cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL}
             }
         ),
@@ -265,17 +280,19 @@ int main()
                 StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
-        /*new FlowComputeSection(
-            fluid_context, "07_extrapolate", fluid_dispatch_size,
+        new FlowComputeSection(
+            fluid_context, "04_prepare_pressure", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types",  cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types",  cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             }
-        ),*/
+        ),
         new FlowComputeSection(
             fluid_context, "09_particles", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
