@@ -10,11 +10,22 @@ const uint CELL_WATER = 2;
 const float time_delta = 0.01;
 const float gravity = 10;
 
+
+uint cellAt(ivec3 i){
+    return imageLoad(cell_types, i).x;
+}
+bool isActive(uint type){
+    return (type == CELL_AIR || type == CELL_WATER);
+}
+
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    uint type1 = imageLoad(cell_types, i).x;
-    //uint type2 = imageLoad(cell_types, i + ivec3(0, 1, 0)).x;
-    if (type1 == CELL_AIR || type1 == CELL_WATER){
-        imageStore(velocities, i, imageLoad(velocities, i) + time_delta*vec4(0, gravity, 0, 0));
+    if (i.y != 0){
+        uint type1 = cellAt(i);
+        uint type2 = cellAt(i - ivec3(0, 1, 0));
+        if (isActive(type1) || isActive(type2)){
+            imageStore(velocities, i, imageLoad(velocities, i) + time_delta*vec4(0, gravity, 0, 0));
+        }
     }
 }

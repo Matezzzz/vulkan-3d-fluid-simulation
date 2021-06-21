@@ -9,16 +9,17 @@ layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D velocit
 
 const int CELL_WATER = 2;
 const float time_delta = 0.01;
-const float diffuse_a = 0.00;
-const float diffuse_b = 1.0 - 6 * diffuse_a;
+const float diffuse_a = 0.1;
 
 
+//TODO - exclude solids out of computation(they shall have no friction)
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     vec3 velocity = imageLoad(velocities_src, i).xyz;
     if (imageLoad(cell_types, i).x == CELL_WATER){
-        vec3 velocity = diffuse_b * velocity + diffuse_a *
+        float diffuse_a_now = diffuse_a * time_delta;
+        vec3 velocity = ( 1.0 - 6 * diffuse_a_now) * velocity + diffuse_a_now *
             (imageLoad(velocities_src, i + ivec3(1, 0, 0)).xyz + imageLoad(velocities_src, i + ivec3(-1, 0, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 1, 0)).xyz + imageLoad(velocities_src, i + ivec3(0, -1, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 0, 1)).xyz + imageLoad(velocities_src, i + ivec3(0, 0, -1)).xyz);

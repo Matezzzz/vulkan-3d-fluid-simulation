@@ -2,23 +2,32 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui)     uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 0, r8ui)    uniform restrict readonly uimage3D cell_types;
 layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 
 const int CELL_SOLID = 3;
+
+
+uint cellAt(ivec3 i){
+    return imageLoad(cell_types, i).x;
+}
+bool isSolid(uint a){
+    return (a == CELL_SOLID);
+}
+
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     vec4 v = imageLoad(velocities, i);
 
-    if (imageLoad(cell_types, i).x == CELL_SOLID){
-        if (imageLoad(cell_types, i + ivec3(1, 0, 0)).x == CELL_SOLID && v.x < 0) v.x = 0;
-        if (imageLoad(cell_types, i + ivec3(0, 1, 0)).x == CELL_SOLID && v.y < 0) v.y = 0;
-        if (imageLoad(cell_types, i + ivec3(0, 0, 1)).x == CELL_SOLID && v.z < 0) v.z = 0;
+    if (cellAt(i) == CELL_SOLID){
+        if (v.x > 0) v.x = 0;
+        if (v.y > 0) v.y = 0;
+        if (v.z > 0) v.z = 0;
     }else{
-        if (imageLoad(cell_types, i + ivec3(1, 0, 0)).x == CELL_SOLID && v.x > 0) v.x = 0;
-        if (imageLoad(cell_types, i + ivec3(0, 1, 0)).x == CELL_SOLID && v.y > 0) v.y = 0;
-        if (imageLoad(cell_types, i + ivec3(0, 0, 1)).x == CELL_SOLID && v.z > 0) v.z = 0;
+        if (isSolid(cellAt(i - ivec3(1, 0, 0))) && v.x < 0) v.x = 0;
+        if (isSolid(cellAt(i - ivec3(0, 1, 0))) && v.y < 0) v.y = 0;
+        if (isSolid(cellAt(i - ivec3(0, 0, 1))) && v.z < 0) v.z = 0;
     }
     imageStore(velocities, i, v);
 }

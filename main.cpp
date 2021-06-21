@@ -73,32 +73,34 @@ int main()
     ImageInfo velocity_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     ExtImage velocities_1_img = velocity_image_info.create();
     ExtImage velocities_2_img = velocity_image_info.create();
-    ExtImage cell_type_img = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
+
+    ImageInfo cell_type_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+    ExtImage cell_types_img = cell_type_image_info.create();
+    ExtImage cell_types_new_img = cell_type_image_info.create();
     ExtImage particles_img = ImageInfo(particles_per_batch, particle_batch_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_type_img, particles_img, pressures_1_img, pressures_2_img, divergence_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 
 
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
-        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
     };
 
 
     ImageUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    vector<ExtImage> images{velocities_1_img, velocities_2_img, cell_type_img, particles_img, pressures_1_img, pressures_2_img, divergence_img};
+    vector<ExtImage> images{velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img};
     vector<PipelineImageState> image_states(IMAGE_COUNT);
 
     enum CellTypes{
         CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
     };
-
 
     // * Create a render pass *
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
@@ -126,7 +128,7 @@ int main()
         fluid_context, "05_pressure", fluid_dispatch_size,
         pressure_solve_image_usages,
         vector<DescriptorUpdateInfo>{
-            StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+            StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
             StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             StorageImageUpdateInfo{"pressures_1", pressures_1_img, VK_IMAGE_LAYOUT_GENERAL},
             StorageImageUpdateInfo{"pressures_2", pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
@@ -137,7 +139,7 @@ int main()
 
 
     SectionList draw_section_list_1{
-        new FlowClearColorSection(CELL_TYPES, ClearValue(CELL_INACTIVE)),
+        new FlowClearColorSection(NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
             fluid_context, "00_update_grid", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
@@ -146,16 +148,40 @@ int main()
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
+                StorageImageUpdateInfo{"cell_types", cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL}
             }
         ),
         new FlowComputeSection(
-            fluid_context, "00a_update_borders", fluid_dispatch_size,
+            fluid_context, "00a_update_active", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
+                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
+                StorageImageUpdateInfo{"cell_types", cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL}
+            }
+        ),
+        new FlowComputeSection(
+            fluid_context, "00b_extrapolate_velocities", particle_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}}
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"new_cell_types",  cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
+            }
+        ),
+        new FlowComputeSection(
+            fluid_context, "00c_update_cell_types", fluid_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"new_cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL}
             }
         ),
         new FlowComputeSection(
@@ -166,7 +192,7 @@ int main()
                 FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 CombinedImageSamplerUpdateInfo{"velocities_src_sampler", velocities_1_img, velocities_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
                 StorageImageUpdateInfo{"velocities_dst", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL}
 
@@ -179,7 +205,7 @@ int main()
                 FlowSectionImageUsage{VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}}
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL}
             }
         ),
@@ -191,9 +217,20 @@ int main()
                 FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}}
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities_src", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities_dst", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL}
+            }
+        ),
+        new FlowComputeSection(
+            fluid_context, "08_solids", fluid_dispatch_size,
+            vector<FlowSectionImageUsage>{
+                FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+            },
+            vector<DescriptorUpdateInfo>{
+                StorageImageUpdateInfo{"cell_types",  cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
         new FlowComputeSection(
@@ -204,7 +241,7 @@ int main()
                 FlowSectionImageUsage{DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types",  cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types",  cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"divergences", divergence_img, VK_IMAGE_LAYOUT_GENERAL},
             }
@@ -223,12 +260,12 @@ int main()
                 FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
             },
             vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
+                StorageImageUpdateInfo{"cell_types", cell_types_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"pressures",  pressures_2_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities", velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
             }
         ),
-        new FlowComputeSection(
+        /*new FlowComputeSection(
             fluid_context, "07_extrapolate", fluid_dispatch_size,
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
@@ -238,18 +275,7 @@ int main()
                 StorageImageUpdateInfo{"cell_types",  cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
                 StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
             }
-        ),
-        new FlowComputeSection(
-            fluid_context, "08_solids", fluid_dispatch_size,
-            vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowSectionImageUsage{VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
-            },
-            vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types",  cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-                StorageImageUpdateInfo{"velocities",  velocities_1_img, VK_IMAGE_LAYOUT_GENERAL},
-            }
-        ),
+        ),*/
         new FlowComputeSection(
             fluid_context, "09_particles", particle_dispatch_size,
             vector<FlowSectionImageUsage>{
@@ -327,7 +353,7 @@ int main()
 
     for (uint32_t i = 0; i < divergence_solve_iterations; i++){
         //draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
-        pressure_section->getPushConstantData().write("isEvenIteration", (i % 2 == 0));
+        pressure_section->getPushConstantData().write("isEvenIteration", (i % 2 == 0) ? 1U : 0U);
         draw_buffer.record(images, pressure_solve_section_list, image_states);
     }
     

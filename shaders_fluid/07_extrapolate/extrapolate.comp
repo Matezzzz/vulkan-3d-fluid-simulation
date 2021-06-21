@@ -8,6 +8,11 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 const int CELL_AIR = 1;
 const int CELL_WATER = 2;
 
+
+
+//TODO use sampler and better indexing to get better velocity approximation
+
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     vec4 v = imageLoad(velocities, i);
@@ -16,12 +21,13 @@ void main(){
         int c = 0;
         vec4 v = vec4(0, 0, 0, 0);
 
-        if (imageLoad(cell_types, i + ivec3(1, 0, 0)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
-        if (imageLoad(cell_types, i + ivec3(0, 1, 0)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(0, 1, 0)); c++; }
-        if (imageLoad(cell_types, i + ivec3(0, 0, 1)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(0, 0, 1)); c++; }
         if (imageLoad(cell_types, i - ivec3(1, 0, 0)).x == CELL_WATER){ v += imageLoad(velocities, i - ivec3(1, 0, 0)); c++; }
         if (imageLoad(cell_types, i - ivec3(0, 1, 0)).x == CELL_WATER){ v += imageLoad(velocities, i - ivec3(0, 1, 0)); c++; }
         if (imageLoad(cell_types, i - ivec3(0, 0, 1)).x == CELL_WATER){ v += imageLoad(velocities, i - ivec3(0, 0, 1)); c++; }
+        if (imageLoad(cell_types, i + ivec3(1, 0, 0)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
+        if (imageLoad(cell_types, i + ivec3(0, 1, 0)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(0, 1, 0)); c++; }
+        if (imageLoad(cell_types, i + ivec3(0, 0, 1)).x == CELL_WATER){ v += imageLoad(velocities, i + ivec3(0, 0, 1)); c++; }
+
         if (c != 0) imageStore(velocities, i, v / c);
     }
 }

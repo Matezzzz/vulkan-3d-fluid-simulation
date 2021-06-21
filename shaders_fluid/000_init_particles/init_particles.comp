@@ -1,6 +1,6 @@
 #version 450
 
-layout(local_size_x = 50, local_size_y = 20) in;
+layout(local_size_x = 20, local_size_y = 20) in;
 
 layout(set = 0, binding = 0, rgba32f) uniform restrict writeonly image2D particles;
 
@@ -8,9 +8,10 @@ layout(set = 0, binding = 0, rgba32f) uniform restrict writeonly image2D particl
 const uint particles_per_batch = 256;
 const uint batch_count = 256;
 const uint max_particle_count = particles_per_batch*batch_count;
+const uint particles_per_row = 20 * 10;
 
 void main(){
-    uint i = (gl_GlobalInvocationID.x + particles_per_batch*gl_GlobalInvocationID.y) % max_particle_count;
+    uint i = (gl_GlobalInvocationID.x + particles_per_row*gl_GlobalInvocationID.y);
     vec3 particle_pos = vec3(2, 2, 1.5) + vec3(vec2(gl_GlobalInvocationID.xy) + vec2(0.5), 0.0) / 50.0;
     imageStore(particles, ivec2(i % particles_per_batch, i / particles_per_batch), vec4(particle_pos, 1.0));
 }

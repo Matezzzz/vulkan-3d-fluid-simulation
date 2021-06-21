@@ -4,7 +4,6 @@ layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, r8ui) uniform restrict uimage3D cell_types;
 
-const uint CELL_INACTIVE = 0;
 const uint CELL_AIR = 1;
 const uint CELL_WATER = 2;
 const uint CELL_SOLID = 3;
@@ -12,22 +11,28 @@ const uint CELL_SOLID = 3;
 
 #define functionInAllDirections(func, op) func(ivec3(1, 0, 0)) op func(ivec3(0, 1, 0)) op func(ivec3(0, 0, 1)) op func(ivec3(-1, 0, 0)) op func(ivec3(0, -1, 0)) op func(ivec3(0, 0, -1))
 
-#define waterAt(move) imageLoad(cell_types, i + move).x == CELL_WATER
+#define waterAt(move) isWater(cellAt(i + move))
 
 
+uint cellAt(ivec3 pos){
+    return imageLoad(cell_types, pos).x;
+}
+bool isWater(uint a){
+    return (a == CELL_WATER);
+}
+void storeCell(ivec3 pos, uint val){
+    imageStore(cell_types, pos, uvec4(val, 0, 0, 0));
+}
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     ivec3 b = imageSize(cell_types) - ivec3(1, 1, 1);
-    uint type = CELL_INACTIVE;
     if ((i.x == 0 || i.x == b.x) || (i.y == 0 || i.y == b.y) || (i.z == 0 || i.z == b.z)){
-        type = CELL_SOLID;
+        storeCell(i, CELL_SOLID);
+    }else{
+        if (!isWater(cellAt(i)) && functionInAllDirections(waterAt, ||)){
+            storeCell(i, CELL_AIR);
+        }
     }
-    else if (imageLoad(cell_types, i).x == CELL_WATER){
-        type = CELL_WATER;
-    }
-    else if(functionInAllDirections(waterAt, ||)){
-        type = CELL_AIR;
-    }
-    imageStore(cell_types, i, uvec4(type, 0, 0, 0));
 }
+
