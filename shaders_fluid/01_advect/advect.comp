@@ -24,16 +24,14 @@ bool isWater(uint type){
 }
 
 float getVelocityXAt(vec3 pos){
-    return texture(velocities_src, pos - vec3(0, 0.5, 0.5)).x;
+    return texture(velocities_src, pos + vec3(0.5, 0, 0)).x;
 }
 float getVelocityYAt(vec3 pos){
-    return texture(velocities_src, pos - vec3(0.5, 0, 0.5)).y;
+    return texture(velocities_src, pos + vec3(0, 0.5, 0)).y;
 }
 float getVelocityZAt(vec3 pos){
-    return texture(velocities_src, pos - vec3(0.5, 0.5, 0)).z;
+    return texture(velocities_src, pos + vec3(0, 0, 0.5)).z;
 }
-
-
 vec3 getVelocityAt(vec3 pos){
     return vec3(getVelocityXAt(pos), getVelocityYAt(pos), getVelocityZAt(pos));
 }
@@ -55,7 +53,7 @@ void main(){
         vec3 cur_v = getVelocityAt(pos_in_tex);
         velocity.y = getVelocityYAt(pos_in_tex - cur_v*time_delta);
     }
-    if (i.z != 0 && (cur_active || isWater(cellAt(i - ivec3(1, 0, 0))))){
+    if (i.z != 0 && (cur_active || isWater(cellAt(i - ivec3(0, 0, 1))))){
         vec3 pos_in_tex = vec3(i) + vec3(0.5, 0.5, 0);
         vec3 cur_v = getVelocityAt(pos_in_tex);
         velocity.z = getVelocityZAt(pos_in_tex - cur_v*time_delta);

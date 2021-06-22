@@ -8,13 +8,20 @@ layout(set = 0, binding = 1, rgba32f) uniform restrict image2D particles;
 
 const float time_delta = 0.01;
 
-vec3 getVelocityAt(vec3 pos){
-    return vec3(
-        texture(velocities, pos - vec3(0, 0.5, 0.5)).x,
-        texture(velocities, pos - vec3(0.5, 0, 0.5)).y,
-        texture(velocities, pos - vec3(0.5, 0.5, 0)).z
-    );
+float getVelocityXAt(vec3 pos){
+    return texture(velocities, pos + vec3(0.5, 0, 0)).x;
 }
+float getVelocityYAt(vec3 pos){
+    return texture(velocities, pos + vec3(0, 0.5, 0)).y;
+}
+float getVelocityZAt(vec3 pos){
+    return texture(velocities, pos + vec3(0, 0, 0.5)).z;
+}
+vec3 getVelocityAt(vec3 pos){
+    return vec3(getVelocityXAt(pos), getVelocityYAt(pos), getVelocityZAt(pos));
+}
+
+
 
 
 

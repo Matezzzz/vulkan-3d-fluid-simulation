@@ -225,7 +225,7 @@ public:
 class FlowComputeSection : public FlowSimplePipelineSection{
     Size3 m_compute_size;
 public:
-    FlowComputeSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
+    FlowComputeSection(DirectoryPipelinesContext& ctx, const string& name, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos, Size3 compute_size) :
         FlowSimplePipelineSection(ctx, name, usages, update_infos), m_compute_size(compute_size)
     {}
     virtual void execute(CommandBuffer& buffer){
@@ -238,8 +238,8 @@ public:
 class FlowGraphicsSection : public FlowSimplePipelineSection{
     uint32_t m_vertex_count;
 public:
-    FlowGraphicsSection(DirectoryPipelinesContext& ctx, const string& name, uint32_t vertex_count, const vector<FlowSectionImageUsage>& usages,
-            const vector<DescriptorUpdateInfo>& update_infos, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0) :
+    FlowGraphicsSection(DirectoryPipelinesContext& ctx, const string& name, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos,
+            uint32_t vertex_count, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0) :
         FlowSimplePipelineSection(ctx, name, usages, update_infos, pipeline_info, render_pass, subpass_index), m_vertex_count(vertex_count)
     {}
     virtual void execute(CommandBuffer& buffer){
@@ -249,24 +249,31 @@ public:
 };
 
 
-
-class FlowComputePushConstantSection : public FlowComputeSection{
+template<typename T>
+class FlowPushConstantSection : public T{
     PushConstantData m_push_constant_data;
 public:
-    FlowComputePushConstantSection(DirectoryPipelinesContext& ctx, const string& name, Size3 compute_size, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos) :
-        FlowComputeSection(ctx, name, compute_size, usages, update_infos), m_push_constant_data(m_context.createPushConstantData())
+    /**
+     * Args should be:
+     * @param args (for compute section) Size3 compute_size
+     * @param args (for graphics section) uint32_t vertex_count, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0
+     */
+    template<typename... Args>
+    FlowPushConstantSection(DirectoryPipelinesContext& ctx, const string& name, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos, const Args&... args) :
+        T(ctx, name, usages, update_infos, args...), m_push_constant_data(this->m_context.createPushConstantData())
     {}
     PushConstantData& getPushConstantData(){
         return m_push_constant_data;
     }
     virtual void execute(CommandBuffer& buffer){
-        buffer.cmdPushConstants(m_pipeline, m_push_constant_data);
-        FlowComputeSection::execute(buffer);
+        buffer.cmdPushConstants(this->m_pipeline, m_push_constant_data);
+        T::execute(buffer);
     }
 };
 
 
-
+typedef FlowPushConstantSection<FlowComputeSection> FlowComputePushConstantSection;
+typedef FlowPushConstantSection<FlowGraphicsSection> FlowGraphicsPushConstantSection;
 
 
 

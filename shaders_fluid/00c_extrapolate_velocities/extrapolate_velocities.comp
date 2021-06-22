@@ -21,11 +21,14 @@ uint newCellAt(ivec3 pos){
     return imageLoad(new_cell_types, pos).x;
 }
 
+bool isAir(uint a){
+    return (a == CELL_AIR);
+}
 bool isWater(uint a){
     return (a == CELL_WATER);
 }
 bool isActive(uint a){
-    return (a != CELL_INACTIVE);
+    return (isWater(a) || isAir(a));
 }
 
 vec3 getExtrapolatedVelocity(ivec3 i){
