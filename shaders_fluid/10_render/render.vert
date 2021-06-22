@@ -14,8 +14,10 @@ const uint particle_batch_size = 256;
 void main(){
     vec4 pos = imageLoad(particles, ivec2(gl_VertexIndex % particle_batch_size, gl_VertexIndex / particle_batch_size));
     if (pos.w == 1.0){
-        gl_Position = vec4(pos.xy / 10.0 - vec2(1.0, 1.0), 0.0, 1.0); //MVP * vec4(pos, 1.0);
-        gl_PointSize = 5 / pos.z;
+        //gl_Position = vec4(pos.xy / 10.0 - vec2(1.0, 1.0), 0.0, 1.0);
+        vec4 scr_pos = MVP * vec4(pos.xyz, 1.0);
+        gl_Position = scr_pos;
+        gl_PointSize = 20 / scr_pos.z;
         should_discard = 0.0;
     }else{
         should_discard = 1.0;

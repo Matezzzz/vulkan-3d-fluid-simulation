@@ -22,11 +22,20 @@ bool isActive(uint type){
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+
+    vec3 force = vec3(0, 0, 0);
+
     if (i.y != 0){
         uint type1 = cellAt(i);
         uint type2 = cellAt(i - ivec3(0, 1, 0));
         if (isActive(type1) || isActive(type2)){
-            imageStore(velocities, i, imageLoad(velocities, i) + time_delta*vec4(0, gravity, 0, 0));
+            force.y += gravity;
         }
+    }
+    if (i.x == 15 && i.y == 18 && i.z == 15 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
+        force.y -= 4000;
+    }
+    if (force.x != 0 || force.y != 0 || force.z != 0){
+        imageStore(velocities, i, imageLoad(velocities, i) + vec4(time_delta*force, 0));
     }
 }

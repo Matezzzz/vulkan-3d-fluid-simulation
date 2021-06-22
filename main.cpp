@@ -348,13 +348,14 @@ int main()
         new FlowClearColorSection( PRESSURES_2, ClearValue(0.f)),
         new FlowClearColorSection( DIVERGENCES, ClearValue(0.f)),
         new FlowComputeSection(
-            fluid_context, "000_init_particles", Size3{10, 10, 1},
+            fluid_context, "000_init_particles",
             vector<FlowSectionImageUsage>{
                 FlowSectionImageUsage{PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_W}},
             },
             vector<DescriptorUpdateInfo>{
                 StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
-            }
+            },
+            Size3{10, 10, 1}
         ),
         new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
     };
@@ -438,7 +439,7 @@ int main()
     //Pipeline normals_pipeline = normals_context.createPipeline(pipeline_info, renderpass);
 
     // * Initialize projection matrices and camera * 
-    Camera camera{{0.f, 0.f, 1.f}, {0.f, 1.f, 0.f}, {0.f, 0.f, 1.f}, window};
+    Camera camera{{10.f, 10.f, -10.f}, {0.f, 0.f, 1.f}, {0.f, -1.f, 0.f}, window};
     //matrix to invert y axis - the one in vulkan is inverted compared to the one in OpenGL, for which GLM was written
     glm::mat4 invert_y_mat(1.0);
     invert_y_mat[1][1] = -1;
@@ -457,7 +458,7 @@ int main()
     while (window.running())
     {
         window.update();
-        //camera.update(0.01f);
+        camera.update(0.01f);
 
 
         queue.submit(draw_buffer, frame_synchronization);
