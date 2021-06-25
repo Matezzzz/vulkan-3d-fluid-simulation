@@ -7,7 +7,7 @@ class FlowCommandBuffer : public CommandBuffer{
 public:
     FlowCommandBuffer(CommandPool& command_pool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) : CommandBuffer(command_pool.allocateBuffer(level))
     {}
-    void record(const vector<ExtImage>& images, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_states)
+    void record(FlowBufferContext& flow_context, const vector<unique_ptr<FlowSection>>& sections)
     {
         //vector<PipelineImageState> first_image_states, last_image_states;
         //getStartingAndEndingImageStates(images.size(), sections, first_image_states, last_image_states);        
@@ -15,7 +15,7 @@ public:
         
         for (const unique_ptr<FlowSection>& section : sections){
             //transition images to correct layouts if necessary
-            section->transitionAllImages(*this, images, image_states);
+            section->transitionAllImages(*this, flow_context);
             section->execute(*this);
         }
     }

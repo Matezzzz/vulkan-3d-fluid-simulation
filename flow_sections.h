@@ -76,18 +76,32 @@ public:
     {}
     ExtImage& getImage(int index){return images[index];}
     Buffer& getBuffer(int index) {return buffers[index];}
+    PipelineImageState& getImageState(int index){return image_states[index];}
+    const PipelineImageState& getImageState(int index) const{return image_states[index];}
 };
 
 
 
-class FlowPipelineSectionImageUsage : public FlowSectionImageUsage{
+class FlowPipelineSectionImageUsage{
 protected:
-    string m_name;
+    FlowSectionImageUsage usage;
+    DescriptorUpdateInfo info;
 public:
-    FlowPipelineSectionImageUsage(const string& name, int descriptor_index_, ImageUsageStage usage_stages_, ImageState img_state_) : 
-        FlowSectionImageUsage(descriptor_index_, usage_stages_, img_state_), m_name(name)
+    FlowPipelineSectionImageUsage(int descriptor_index_, ImageUsageStage usage_stages_, ImageState img_state_, const DescriptorUpdateInfo& desc_info) : 
+        usage(descriptor_index_, usage_stages_, img_state_), info{desc_info}
     {}
-    virtual DescriptorUpdateInfo toUpdateInfo(FlowBufferContext& ctx) const = 0;
+    const FlowSectionImageUsage& getImageUsage() const{
+        return usage;
+    }
+    DescriptorUpdateInfo getUpdateInfo(FlowBufferContext& ctx) const{
+        DescriptorUpdateInfo i2(info);
+        if (i2.isImage()){
+            i2.imageInfo()->imageView = ctx.getImage(usage.descriptor_index);
+        }else{
+            i2.bufferInfo()->buffer = ctx.getBuffer(usage.descriptor_index);
+        }
+        return i2;
+    }
 };
 
 
@@ -95,14 +109,20 @@ public:
 
 class FlowStorageImage : public FlowPipelineSectionImageUsage{
 public:
-    using FlowPipelineSectionImageUsage::FlowPipelineSectionImageUsage;
-    virtual DescriptorUpdateInfo toUpdateInfo(FlowBufferContext& ctx) const{
-        return StorageImageUpdateInfo{m_name, ctx.getImage(descriptor_index), state.layout};
-    }
+    FlowStorageImage(const string& name, int descriptor_index, ImageUsageStage usage_stages, ImageState img_state) :
+        FlowPipelineSectionImageUsage(descriptor_index, usage_stages, img_state,
+            StorageImageUpdateInfo(name, VK_NULL_HANDLE, img_state.layout))
+    {}
 };
 
 
-
+class FlowCombinedImage : public FlowPipelineSectionImageUsage{
+public:
+    FlowCombinedImage(const string& name, int descriptor_index, ImageUsageStage usage_stages, ImageState img_state, VkSampler sampler) :
+        FlowPipelineSectionImageUsage(descriptor_index, usage_stages, img_state,
+            CombinedImageSamplerUpdateInfo{name, VK_NULL_HANDLE, sampler, img_state.layout})
+    {}
+};
 
 
 
@@ -113,18 +133,19 @@ public:
     FlowSection(const vector<FlowSectionImageUsage>& usages) : m_images_used(usages)
     {}
     virtual void initializeShader(DirectoryPipelinesContext&){}
-    virtual void complete(const vector<ExtImage>&){};
+    virtual void complete(){};
     virtual void execute(CommandBuffer&) = 0;
 
-    void transitionAllImages(CommandBuffer& buffer, const vector<ExtImage>& images, vector<PipelineImageState>& image_states){
+    void transitionAllImages(CommandBuffer& buffer, FlowBufferContext& flow_context){
          //transition images to correct layouts if necessary
         for (const FlowSectionImageUsage& img : m_images_used){
             //if (img.toImageState(true) != image_states[img.descriptor_index]){
+            int i = img.descriptor_index;
             buffer.cmdBarrier(
-                image_states[img.descriptor_index].last_use, img.usage_stages.from,
-                images[img.descriptor_index].createMemoryBarrier(image_states[img.descriptor_index], img.state)
+                flow_context.getImageState(i).last_use, img.usage_stages.from,
+                flow_context.getImage(img.descriptor_index).createMemoryBarrier(flow_context.getImageState(i), img.state)
             );
-            image_states[img.descriptor_index] = img.toImageState(false);
+            flow_context.getImageState(i) = img.toImageState(false);
         }
     }
 };
@@ -140,9 +161,9 @@ public:
         reserve(sizeof...(args));
         addSections(args...);
     }
-    void complete(const vector<ExtImage>& images){
+    void complete(){
         for (unique_ptr<FlowSection>& s : *this){
-            s->complete(images);
+            s->complete();
         }
     }
     void getLastImageStates(vector<PipelineImageState>& states) const{
@@ -168,7 +189,6 @@ class FlowTransitionSection : public FlowSection{
 public:
     FlowTransitionSection(const vector<FlowSectionImageUsage>& usages) : FlowSection(usages)
     {}
-    virtual void complete(const vector<ExtImage>&){}
     virtual void execute(CommandBuffer&){}
 };
 
@@ -205,31 +225,28 @@ private:
 
 class FlowClearColorSection : public FlowSection{
     VkClearValue m_clear_value;
-    const ExtImage* m_image = nullptr;
+    const ExtImage& m_image;
 public:
-    FlowClearColorSection(int descriptor_index, VkClearValue clear_value) :
-        FlowSection({FlowSectionImageUsage(descriptor_index, ImageUsageStage(VK_PIPELINE_STAGE_TRANSFER_BIT), ImageState{IMAGE_TRANSFER_DST})}), m_clear_value(clear_value)
+    FlowClearColorSection(FlowBufferContext& ctx, int descriptor_index, VkClearValue clear_value) :
+        FlowSection({FlowSectionImageUsage(descriptor_index, ImageUsageStage(VK_PIPELINE_STAGE_TRANSFER_BIT), ImageState{IMAGE_TRANSFER_DST})}), m_clear_value(clear_value), m_image(ctx.getImage(descriptor_index))
     {}
-    virtual void complete(const vector<ExtImage>& attachments){
-        m_image = &attachments[m_images_used[0].descriptor_index];
-    }
     virtual void execute(CommandBuffer& buffer){
-        buffer.cmdClearColor(*m_image, ImageState{IMAGE_TRANSFER_DST}, m_clear_value.color);
+        buffer.cmdClearColor(m_image, ImageState{IMAGE_TRANSFER_DST}, m_clear_value.color);
     }
 };
 
 
 class FlowPipelineSectionDescriptors{
-    const FlowBufferContext& m_context;
-    vector<FlowPipelineSectionImageUsage>& m_images;
+    FlowBufferContext& m_context;
+    vector<FlowPipelineSectionImageUsage> m_images;
 public:
-    FlowPipelineSectionDescriptors(const FlowBufferContext& ctx, vector<FlowPipelineSectionImageUsage>& images) : m_context(ctx), m_images(images)
+    FlowPipelineSectionDescriptors(FlowBufferContext& ctx, const vector<FlowPipelineSectionImageUsage>& images) : m_context(ctx), m_images(images)
     {}
     vector<FlowSectionImageUsage> getImageUsages() const{
         vector<FlowSectionImageUsage> usages;
         usages.reserve(m_images.size());
         for (const FlowPipelineSectionImageUsage& u : m_images){
-            usages.push_back(u);
+            usages.push_back(u.getImageUsage());
         }
         return usages;
     }
@@ -237,7 +254,7 @@ public:
         vector<DescriptorUpdateInfo> infos;
         infos.reserve(m_images.size());
         for (const FlowPipelineSectionImageUsage& u : m_images){
-            infos.push_back(u.toUpdateInfo(m_context));
+            infos.push_back(u.getUpdateInfo(m_context));
         }
         return infos;
     }
@@ -277,7 +294,7 @@ public:
         m_context.reserveDescriptorSets(1);
     }
 
-    virtual void complete(const vector<ExtImage>&){
+    virtual void complete(){
         m_context.allocateDescriptorSets(m_descriptor_set);
         m_descriptor_set.updateDescriptorsV(m_descriptor_update_infos);
     }
@@ -303,7 +320,7 @@ public:
 class FlowGraphicsSection : public FlowSimplePipelineSection{
     uint32_t m_vertex_count;
 public:
-    FlowGraphicsSection(DirectoryPipelinesContext& ctx, const string& name, const FlowPipelineSectionDescriptors& usages, const vector<DescriptorUpdateInfo>& update_infos,
+    FlowGraphicsSection(DirectoryPipelinesContext& ctx, const string& name, const FlowPipelineSectionDescriptors& usages,
             uint32_t vertex_count, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0) :
         FlowSimplePipelineSection(ctx, name, usages, pipeline_info, render_pass, subpass_index), m_vertex_count(vertex_count)
     {}
@@ -324,8 +341,8 @@ public:
      * @param args (for graphics section) uint32_t vertex_count, const PipelineInfo& pipeline_info, VkRenderPass render_pass, uint32_t subpass_index = 0
      */
     template<typename... Args>
-    FlowPushConstantSection(DirectoryPipelinesContext& ctx, const string& name, const vector<FlowSectionImageUsage>& usages, const vector<DescriptorUpdateInfo>& update_infos, const Args&... args) :
-        T(ctx, name, usages, update_infos, args...), m_push_constant_data(this->m_context.createPushConstantData())
+    FlowPushConstantSection(DirectoryPipelinesContext& ctx, const string& name, const FlowPipelineSectionDescriptors& usages, const Args&... args) :
+        T(ctx, name, usages, args...), m_push_constant_data(this->m_context.createPushConstantData())
     {}
     PushConstantData& getPushConstantData(){
         return m_push_constant_data;
