@@ -126,7 +126,7 @@ int main()
         new FlowClearColorSection(flow_context,  PRESSURES_2, ClearValue(0.f)),
         new FlowClearColorSection(flow_context,  DIVERGENCES, ClearValue(0.f)),
         new FlowComputeSection(
-            fluid_context, "000_init_particles",
+            fluid_context, "00_init_particles",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -146,7 +146,7 @@ int main()
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
-            fluid_context, "01_update_grid",
+            fluid_context, "01_update_water",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
