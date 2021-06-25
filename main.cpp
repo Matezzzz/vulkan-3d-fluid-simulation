@@ -113,37 +113,33 @@ int main()
         CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
     };
 
-    // * Create a render pass *
-    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
-    // width, height, clear color, depth clear color
-    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
-
-    // * Create framebuffers for all swapchain images *
-    swapchain.createFramebuffers(render_pass);
-
-
-
     
 
     DirectoryPipelinesContext fluid_context("shaders_fluid");
 
-
-
-    FlowPipelineSectionDescriptors pressure_solve_image_usages{
-        flow_context,
-        vector<FlowPipelineSectionDescriptorUsage>{
-            FlowStorageImage{"cell_types", CELL_TYPES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
-            FlowStorageImage{"divergences", DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}},
-            FlowStorageImage{"pressures_1", PRESSURES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
-            FlowStorageImage{"pressures_2", PRESSURES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}},
-        }
+    SectionList init_sections{
+        new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(flow_context,   CELL_TYPES, ClearValue(CELL_INACTIVE)),
+        new FlowClearColorSection(flow_context,    PARTICLES, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(flow_context,  PRESSURES_1, ClearValue(0.f)),
+        new FlowClearColorSection(flow_context,  PRESSURES_2, ClearValue(0.f)),
+        new FlowClearColorSection(flow_context,  DIVERGENCES, ClearValue(0.f)),
+        new FlowComputeSection(
+            fluid_context, "000_init_particles",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{IMAGE_STORAGE_W}}
+                }
+            },
+            Size3{1, 256, 1}
+        ),
     };
-    auto pressure_section = new FlowComputePushConstantSection(
-        fluid_context, "05_pressure",
-        pressure_solve_image_usages,
-        fluid_dispatch_size
-    );
-    SectionList pressure_solve_section_list(pressure_section);
+
+    
+
+    
 
 
 
@@ -268,6 +264,26 @@ int main()
         new FlowClearColorSection(flow_context, PRESSURES_2, ClearValue(pressure_air)),
     };
 
+
+    auto pressure_section = new FlowComputePushConstantSection(
+        fluid_context, "05_pressure",
+        FlowPipelineSectionDescriptors{
+            flow_context,
+            vector<FlowPipelineSectionDescriptorUsage>{
+                FlowStorageImage{"cell_types", CELL_TYPES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowStorageImage{"divergences", DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowStorageImage{"pressures_1", PRESSURES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
+                FlowStorageImage{"pressures_2", PRESSURES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}}
+            }
+        },
+        fluid_dispatch_size
+    );
+    SectionList pressure_solve_section_list(pressure_section);
+
+
+
+
+
     SectionList draw_section_list_2{
         new FlowComputeSection(
             fluid_context, "06_fix_divergence",
@@ -306,6 +322,16 @@ int main()
         )
     };
 
+
+    // * Create a render pass *
+    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
+    // width, height, clear color, depth clear color
+    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
+
+    // * Create framebuffers for all swapchain images *
+    swapchain.createFramebuffers(render_pass);
+
+
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
     auto render_section = new FlowGraphicsPushConstantSection(
@@ -322,26 +348,7 @@ int main()
 
 
 
-    SectionList init_sections{
-        new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(flow_context,   CELL_TYPES, ClearValue(CELL_INACTIVE)),
-        new FlowClearColorSection(flow_context,    PARTICLES, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(flow_context,  PRESSURES_1, ClearValue(0.f)),
-        new FlowClearColorSection(flow_context,  PRESSURES_2, ClearValue(0.f)),
-        new FlowClearColorSection(flow_context,  DIVERGENCES, ClearValue(0.f)),
-        new FlowComputeSection(
-            fluid_context, "000_init_particles",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{IMAGE_STORAGE_W}}
-                }
-            },
-            Size3{1, 256, 1}
-        ),
-        //new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
-    };
+
 
     fluid_context.createDescriptorPool();
 
