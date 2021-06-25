@@ -146,7 +146,7 @@ int main()
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
-            fluid_context, "00_update_grid",
+            fluid_context, "01_update_grid",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -157,7 +157,7 @@ int main()
             particle_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "00a_update_active",
+            fluid_context, "02_update_active",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -167,7 +167,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "00b_compute_extrapolated_velocities",
+            fluid_context, "03_compute_extrapolated_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -179,7 +179,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "00c_extrapolate_velocities",
+            fluid_context, "04_set_extrapolated_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -192,7 +192,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "00d_update_cell_types",
+            fluid_context, "05_update_cell_types",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -203,7 +203,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "01_advect",
+            fluid_context, "06_advect",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -215,7 +215,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "02_forces",
+            fluid_context, "07_forces",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -226,7 +226,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "03_diffuse",
+            fluid_context, "08_diffuse",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -238,7 +238,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "08_solids",
+            fluid_context, "09_solids",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -249,7 +249,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "04_prepare_pressure",
+            fluid_context, "10_prepare_pressure",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -266,7 +266,7 @@ int main()
 
 
     auto pressure_section = new FlowComputePushConstantSection(
-        fluid_context, "05_pressure",
+        fluid_context, "11_solve_pressure",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
@@ -286,7 +286,7 @@ int main()
 
     SectionList draw_section_list_2{
         new FlowComputeSection(
-            fluid_context, "06_fix_divergence",
+            fluid_context, "12_fix_divergence",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -298,19 +298,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "04_prepare_pressure",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"divergences", DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}}
-                }
-            },
-            fluid_dispatch_size
-        ),
-        new FlowComputeSection(
-            fluid_context, "09_particles",
+            fluid_context, "13_particles",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -335,7 +323,7 @@ int main()
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
     auto render_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "10_render",
+        fluid_context, "14_render",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
