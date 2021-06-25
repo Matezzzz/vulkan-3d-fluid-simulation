@@ -32,9 +32,18 @@ void main(){
             force.y += gravity;
         }
     }
-    if (i.x == 15 && i.y == 18 && i.z == 15 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
+    if (i.x == 10 && i.y == 18 && i.z == 10 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
         force.y -= 4000;
     }
+    /*if (i.x == 15 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
+        force.y -= 4000;
+    }
+    if (i.x == 5 && i.y == 18 && i.z == 15 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
+        force.y -= 4000;
+    }
+    if (i.x == 5 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
+        force.y -= 4000;
+    }*/
     if (force.x != 0 || force.y != 0 || force.z != 0){
         imageStore(velocities, i, imageLoad(velocities, i) + vec4(time_delta*force, 0));
     }

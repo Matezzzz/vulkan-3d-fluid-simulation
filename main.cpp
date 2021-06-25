@@ -99,8 +99,13 @@ int main()
 
     ImageUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-    vector<ExtImage> images{velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img};
-    vector<PipelineImageState> image_states(IMAGE_COUNT);
+
+
+    FlowBufferContext flow_context{
+        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img},
+        {},
+        vector<PipelineImageState>(IMAGE_COUNT)
+    };    
 
     enum CellTypes{
         CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
@@ -147,23 +152,22 @@ int main()
         new FlowClearColorSection(NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
             fluid_context, "00_update_grid",
-            vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{PARTICLES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
-            },
-            vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"particles",  particles_img, VK_IMAGE_LAYOUT_GENERAL},
-                StorageImageUpdateInfo{"cell_types", cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL}
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionImageUsage>{
+                    FlowStorageImage{"particles", PARTICLES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
+                }
             },
             particle_dispatch_size
         ),
         new FlowComputeSection(
             fluid_context, "00a_update_active",
-            vector<FlowSectionImageUsage>{
-                FlowSectionImageUsage{NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
-            },
-            vector<DescriptorUpdateInfo>{
-                StorageImageUpdateInfo{"cell_types", cell_types_new_img, VK_IMAGE_LAYOUT_GENERAL}
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionImageUsage>{
+                    FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
+                }
             },
             fluid_dispatch_size
         ),
