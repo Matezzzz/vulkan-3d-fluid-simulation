@@ -1,9 +1,12 @@
 #version 450
 
-layout(local_size_x = 256, local_size_y = 1) in;
+layout(local_size_x = 256) in;
 
 layout(set = 0, binding = 0) uniform sampler3D velocities;
-layout(set = 0, binding = 1, rgba32f) uniform restrict image2D particles;
+layout(set = 0, binding = 1) buffer particles{
+    vec4 particle_positions[65536];
+};
+
 
 
 const float time_delta = 0.01;
@@ -26,11 +29,11 @@ vec3 getVelocityAt(vec3 pos){
 
 
 void main(){
-    ivec2 i = ivec2(gl_GlobalInvocationID.xy);
-    vec4 pos = imageLoad(particles, i);
+    int i = int(gl_GlobalInvocationID.x);
+    vec4 pos = particle_positions[i];
     if (pos.w == 1.0){
         vec3 v = getVelocityAt(pos.xyz);
         vec3 result_pos = pos.xyz + v*time_delta;
-        imageStore(particles, i, vec4(result_pos, 1.0));
+        particle_positions[i] = vec4(result_pos, 1.0);
     }
 } 

@@ -1,8 +1,10 @@
 #version 450
 
-layout(local_size_x = 256, local_size_y = 1) in;
+layout(local_size_x = 256) in;
 
-layout(set = 0, binding = 0, rgba32f) uniform restrict readonly  image2D particles;
+layout(set = 0, binding = 0) buffer readonly particles{
+    vec4 particle_positions[65536];
+};
 layout(set = 0, binding = 1, r8ui)    uniform restrict writeonly uimage3D cell_types;
 
 
@@ -10,8 +12,8 @@ layout(set = 0, binding = 1, r8ui)    uniform restrict writeonly uimage3D cell_t
 const int CELL_WATER = 2;
 
 void main(){
-    ivec2 i = ivec2(gl_GlobalInvocationID.xy);
-    vec4 pos = imageLoad(particles, i);
+    int i = int(gl_GlobalInvocationID.x);
+    vec4 pos = particle_positions[i];
     if (pos.w == 1.0){
         imageStore(cell_types, ivec3(pos.xyz), ivec4(CELL_WATER, 0, 0, 0));
     }

@@ -20,11 +20,11 @@ public:
         }
     }
 private:
-    void getStartingAndEndingImageStates(int image_count, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
+    /*void getStartingAndEndingImageStates(int image_count, const vector<unique_ptr<FlowSection>>& sections, vector<PipelineImageState>& image_first_uses, vector<PipelineImageState>& image_last_uses){
         image_first_uses.resize(image_count, PipelineImageState{LAYOUT_NOT_USED_YET});
         image_last_uses.resize(image_count, PipelineImageState{LAYOUT_NOT_USED_YET});
         for (auto& section : sections){
-            for (const FlowSectionImageUsage& img : section->m_images_used){
+            for (const FlowSectionDescriptorUsage& img : section->m_images_used){
                 PipelineImageState& s = image_first_uses[img.descriptor_index];
                 if (s.layout == LAYOUT_NOT_USED_YET){
                     s = img.toImageState(true);
@@ -41,5 +41,5 @@ private:
                 image_states[i] = PipelineImageState{image_first_uses[i]};
             }
         }
-    }
+    }*/
 };

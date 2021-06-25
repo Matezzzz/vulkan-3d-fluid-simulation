@@ -28,7 +28,7 @@ constexpr uint32_t particle_batch_count = 256;
 constexpr uint32_t particles_per_batch = 256;
 Size3 particle_local_group_size{particles_per_batch, 1, 1};
 constexpr uint32_t max_particle_count = particle_batch_count*particles_per_batch;
-Size3 particle_dispatch_size = Size3{particles_per_batch, particle_batch_count, 1} / particle_local_group_size;
+Size3 particle_dispatch_size = Size3{max_particle_count, 1, 1} / particle_local_group_size;
 
 const float pressure_air = 1.0;
 
@@ -81,30 +81,32 @@ int main()
     ImageInfo cell_type_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage cell_types_img = cell_type_image_info.create();
     ExtImage cell_types_new_img = cell_type_image_info.create();
-    ExtImage particles_img = ImageInfo(particles_per_batch, particle_batch_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
+    //ExtImage particles_img = ImageInfo(particles_per_batch, particle_batch_count, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
+    Buffer particles_buffer = BufferInfo(max_particle_count * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BufferMemoryObject buffer_memory({particles_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
-        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PARTICLES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
+    };
+    enum BufferAttachments{
+        PARTICLES
     };
 
-
-    ImageUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-
+    DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     FlowBufferContext flow_context{
-        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, particles_img, pressures_1_img, pressures_2_img, divergence_img},
-        {},
-        vector<PipelineImageState>(IMAGE_COUNT)
+        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img},
+        vector<PipelineImageState>(IMAGE_COUNT),
+        {particles_buffer},
+        {PipelineBufferState{BUFFER_NEWLY_CREATED}}
     };    
 
     enum CellTypes{
@@ -129,7 +131,7 @@ int main()
 
     FlowPipelineSectionDescriptors pressure_solve_image_usages{
         flow_context,
-        vector<FlowPipelineSectionImageUsage>{
+        vector<FlowPipelineSectionDescriptorUsage>{
             FlowStorageImage{"cell_types", CELL_TYPES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
             FlowStorageImage{"divergences", DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}},
             FlowStorageImage{"pressures_1", PRESSURES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
@@ -151,8 +153,8 @@ int main()
             fluid_context, "00_update_grid",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
-                    FlowStorageImage{"particles", PARTICLES, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particles", PARTICLES, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
                 }
             },
@@ -162,7 +164,7 @@ int main()
             fluid_context, "00a_update_active",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
             },
@@ -172,7 +174,7 @@ int main()
             fluid_context, "00b_compute_extrapolated_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"extrapolated_velocities", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -184,7 +186,7 @@ int main()
             fluid_context, "00c_extrapolate_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"new_cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"cell_types", CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
@@ -197,7 +199,7 @@ int main()
             fluid_context, "00d_update_cell_types",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"new_cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"cell_types", CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}}
                 }
@@ -208,7 +210,7 @@ int main()
             fluid_context, "01_advect",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types",      CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowCombinedImage{"velocities_src", VELOCITIES_1, usage_compute, ImageState{IMAGE_SAMPLER}, velocities_sampler},
                     FlowStorageImage{"velocities_dst",  VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -220,7 +222,7 @@ int main()
             fluid_context, "02_forces",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
@@ -231,7 +233,7 @@ int main()
             fluid_context, "03_diffuse",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types",     CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities_src", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities_dst", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -243,7 +245,7 @@ int main()
             fluid_context, "08_solids",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}}
                 }
@@ -254,7 +256,7 @@ int main()
             fluid_context, "04_prepare_pressure",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"divergences",DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -271,7 +273,7 @@ int main()
             fluid_context, "06_fix_divergence",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"pressures", PRESSURES_2,  usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}}
@@ -283,7 +285,7 @@ int main()
             fluid_context, "04_prepare_pressure",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"divergences", DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -295,9 +297,9 @@ int main()
             fluid_context, "09_particles",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
+                vector<FlowPipelineSectionDescriptorUsage>{
                     FlowCombinedImage{"velocities", VELOCITIES_1,   usage_compute, ImageState{IMAGE_SAMPLER}, velocities_sampler},
-                    FlowStorageImage{"particles", PARTICLES, usage_compute, ImageState{IMAGE_STORAGE_RW}},
+                    FlowStorageBuffer{"particles", PARTICLES, usage_compute, BufferState{BUFFER_STORAGE_RW}},
                 }
             },
             particle_dispatch_size
@@ -310,8 +312,8 @@ int main()
         fluid_context, "10_render",
         FlowPipelineSectionDescriptors{
             flow_context,
-            vector<FlowPipelineSectionImageUsage>{
-                FlowStorageImage{"particles", PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_R}}
+            vector<FlowPipelineSectionDescriptorUsage>{
+                FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_R}}
             }
         },
         max_particle_count, render_pipeline_info, render_pass
@@ -332,13 +334,13 @@ int main()
             fluid_context, "000_init_particles",
             FlowPipelineSectionDescriptors{
                 flow_context,
-                vector<FlowPipelineSectionImageUsage>{
-                    FlowStorageImage{"particles", PARTICLES, ImageUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), ImageState{IMAGE_STORAGE_W}}
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{IMAGE_STORAGE_W}}
                 }
             },
-            Size3{10, 10, 1}
+            Size3{1, 256, 1}
         ),
-        new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
+        //new FlowIntoLoopTransitionSection(IMAGE_COUNT, draw_section_list_1, pressure_solve_section_list, draw_section_list_2, render_section_list)
     };
 
     fluid_context.createDescriptorPool();
