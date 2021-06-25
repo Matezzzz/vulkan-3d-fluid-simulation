@@ -1,7 +1,7 @@
 #version 450
 
 
-layout(set = 0, binding = 0) buffer readonly particles{
+layout(set = 0, binding = 0) buffer restrict readonly particles{
     vec4 particle_positions[65536];
 };
 

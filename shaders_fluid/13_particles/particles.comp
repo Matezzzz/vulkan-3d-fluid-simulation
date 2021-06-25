@@ -3,7 +3,7 @@
 layout(local_size_x = 256) in;
 
 layout(set = 0, binding = 0) uniform sampler3D velocities;
-layout(set = 0, binding = 1) buffer particles{
+layout(set = 0, binding = 1) buffer restrict particles{
     vec4 particle_positions[65536];
 };
 

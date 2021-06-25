@@ -2,10 +2,10 @@
 
 layout(local_size_x = 256) in;
 
-layout(set = 0, binding = 0) buffer readonly particles{
+layout(set = 0, binding = 0) buffer restrict readonly particles{
     vec4 particle_positions[65536];
 };
-layout(set = 0, binding = 1, r8ui)    uniform restrict writeonly uimage3D cell_types;
+layout(set = 0, binding = 1, r8ui) uniform restrict writeonly uimage3D cell_types;
 
 
 

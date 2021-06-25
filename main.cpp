@@ -117,6 +117,7 @@ int main()
 
     DirectoryPipelinesContext fluid_context("shaders_fluid");
 
+
     SectionList init_sections{
         new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
         new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
@@ -138,10 +139,6 @@ int main()
     };
 
     
-
-    
-
-
 
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
@@ -313,7 +310,6 @@ int main()
 
     // * Create a render pass *
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
-    // width, height, clear color, depth clear color
     RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
 
     // * Create framebuffers for all swapchain images *
@@ -336,13 +332,11 @@ int main()
 
 
 
-
-
     fluid_context.createDescriptorPool();
 
 
-    init_sections.complete();
     FlowCommandBuffer init_buffer{command_pool};
+    init_sections.complete();
     init_buffer.startRecordPrimary();
     init_buffer.record(flow_context, init_sections);
     init_buffer.endRecord();    
@@ -356,16 +350,7 @@ int main()
     draw_buffer.startRecordPrimary();
     draw_buffer.record(flow_context, draw_section_list_1);
 
-    /*FlowCommandBuffer pressure_solve_buffer(command_pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
-    pressure_solve_buffer.startRecordSecondary(CommandBufferInheritanceInfo(), VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
-    pressure_section->getPushConstantData().write("isEvenIteration", false);
-    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
-    pressure_section->getPushConstantData().write("isEvenIteration", true);
-    pressure_solve_buffer.record(images, pressure_solve_section_list, image_states);
-    pressure_solve_buffer.endRecord();*/
-
     for (uint32_t i = 0; i < divergence_solve_iterations; i++){
-        //draw_buffer.cmdExecuteCommands(pressure_solve_buffer);
         pressure_section->getPushConstantData().write("isEvenIteration", (i % 2 == 0) ? 1U : 0U);
         draw_buffer.record(flow_context, pressure_solve_section_list);
     }
@@ -374,47 +359,6 @@ int main()
     draw_buffer.endRecord();
     
 
-    
-
-
-    // * Managing uniform buffer data for given context *
-    //MixedBufferData push_c_data = shader_ctx.createUniformBufferData(1, "u_light_data");
-    //push_c_data.write("light_positions", light_positions).write("light_colors", light_colors);
-
-    // * Creating buffers *
-    /*vector<Buffer> m_vertex_buffers = device_local_buffer_creator.createBuffers(
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VertexCreator::createPlane(15, 15, -15, -15, 30, 30),
-        VertexCreator::screenQuadTexCoords(),
-    );*/
-    //Buffer& plane_vertices      = m_vertex_buffers[0];
-    //Buffer& screen_q_vertices       = m_vertex_buffers[1];
-    
-
-    // * Updating descriptor sets *
-    /*
-    descriptor_set_advect.updateDescriptors(
-        StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
-        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL},
-        CombinedImageSamplerUpdateInfo{"velocities_1_sampler", velocities_1_img, advect_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
-    );
-    descriptor_set_forces.updateDescriptors(
-        StorageImageUpdateInfo{"velocities_2", velocities_2_img, VK_IMAGE_LAYOUT_GENERAL},
-        StorageImageUpdateInfo{"cell_types", cell_type_img, VK_IMAGE_LAYOUT_GENERAL}
-    );
-    */
-
-
-    
-    // * Create standalone framebuffer *
-    //VkFramebuffer render_framebuffer = FramebufferInfo(screen_width, screen_height, {color_image_view, depth_image.createView()}, renderpass).create();
-
-    // * Create a pipeline *
-    //PipelineInfo pipeline_info{screen_width, screen_height, 1};
-    //pipeline_info.getVertexInputInfo().addFloatBuffer({2});
-    //pipeline_info.getDepthStencilInfo().enableDepthTest().enableDepthWrite();
-    //Pipeline copper_pipeline = shader_ctx.createPipeline(pipeline_info, renderpass);
-    //Pipeline normals_pipeline = normals_context.createPipeline(pipeline_info, renderpass);
 
     // * Initialize projection matrices and camera * 
     Camera camera{{10.f, 10.f, -10.f}, {0.f, 0.f, 1.f}, {0.f, -1.f, 0.f}, window};
@@ -461,12 +405,6 @@ int main()
         render_section->execute(render_command_buffer);
         render_command_buffer.cmdEndRenderPass();
         render_command_buffer.endRecord();
-        
-        
-
-        // * Bind vertex buffers and draw *
-        //draw_command_buffer.cmdBindVertexBuffers({copper_vertex_buffer});
-        //draw_command_buffer.cmdDrawVertices(copper_vertex_buffer.getSize() / sizeof(float) / 2);
         
         
         // * Submit command buffer and wait for it to finish*
