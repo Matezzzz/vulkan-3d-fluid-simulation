@@ -26,8 +26,12 @@ struct Size3{
 
 class PipelineBufferState : public BufferState{
 public:
-    VkAccessFlags access;
     VkPipelineStageFlags last_use;
+    PipelineBufferState(BufferState state, VkPipelineStageFlags last_use_ = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) : BufferState(state), last_use(last_use_)
+    {}
+
+    PipelineBufferState(VkPipelineStageFlags last_use_ = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) : last_use(last_use_)
+    {}
 };
 
 
@@ -193,17 +197,13 @@ public:
             int i = d.descriptor_index;
 
             if (d.isImage()){
-                buffer.cmdBarrier(
-                    flow_context.getImageState(i).last_use, d.usage_stages.from,
-                    flow_context.getImage(i).createMemoryBarrier(flow_context.getImageState(i), d.state.image)
-                );
-                flow_context.getImageState(i) = d.toImageState(false);
+                PipelineImageState& state = flow_context.getImageState(i);
+                buffer.cmdBarrier(state.last_use, d.usage_stages.from, flow_context.getImage(i).createMemoryBarrier(state, d.state.image));
+                state = d.toImageState(false);
             }else{
-                buffer.cmdBarrier(
-                    flow_context.getImageState(i).last_use, d.usage_stages.from,
-                    flow_context.getBuffer(i).createMemoryBarrier(flow_context.getBufferState(i).access, d.state.buffer.access)
-                );
-                flow_context.getBufferState(i) = d.toBufferState(false);
+                PipelineBufferState& state = flow_context.getBufferState(i);
+                buffer.cmdBarrier(state.last_use, d.usage_stages.from, flow_context.getBuffer(i).createMemoryBarrier(state.access, d.state.buffer.access));
+                state = d.toBufferState(false);
             }
             
         }
