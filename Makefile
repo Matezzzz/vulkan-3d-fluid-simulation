@@ -11,6 +11,7 @@ OUT_FILENAME = fluid_sim.exe
 
 SHADER_DIR=shaders_fluid
 
+CURRENT_PROJECT_FILES = $(wildcard *.cpp *.h)
 
 
 all : app shaders
@@ -27,7 +28,7 @@ $(info $(wildcard $(SHADER_WILDCARD_STRINGS)))
 shaders : $(wildcard $(SHADER_WILDCARD_STRINGS))
 	cd $(SHADER_DIR) && python build_shaders.py
 
-$(OUT_FILENAME) : just-a-vulkan-library/libJAVL.a *.h *.cpp
+$(OUT_FILENAME) : just-a-vulkan-library/libJAVL.a $(CURRENT_PROJECT_FILES)
 	g++ $(SOURCE_FILES) $(CPP_FLAGS) $(addprefix -L, $(LINK_DIRS)) $(addprefix -l, $(LINK_LIBS)) -o $(OUT_FILENAME)
 
 app : $(OUT_FILENAME)
