@@ -131,7 +131,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{IMAGE_STORAGE_W}}
+                    FlowStorageBuffer{"particles", PARTICLES, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_W}}
                 }
             },
             Size3{1, 256, 1}
