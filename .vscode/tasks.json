@@ -3,44 +3,10 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "CompileLibrary",
+            "label": "CompileProject",
             "command": "mingw32-make",
             "args": [
                 "all"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}\\just-a-vulkan-library\\.obj"
-            }
-        },
-        {
-            "type": "shell",
-            "label": "CompileShaders",
-            "dependsOn":[ 
-                "CompileLibrary"
-            ],
-            "command": "python",
-            "args": [
-                "build_shaders.py"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}\\shaders_fluid"
-            }
-        },
-        {
-            "type": "shell",
-            "label": "CompileProject",
-            "dependsOn":[ 
-                "CompileShaders"
-            ],
-            "command": "g++",
-            "args": [
-                "-std=c++17",
-                "-g",
-                "main.cpp",
-                "-L${workspaceFolder}\\just-a-vulkan-library",
-                "-LC:/Program Files/MSYS2/mingw64/x86_64-w64-mingw32/lib",
-                "-lJAVL", "-lglfw3dll",
-                "-o", "fluid_sim.exe"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
