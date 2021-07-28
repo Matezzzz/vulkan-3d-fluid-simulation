@@ -1,2 +1,3 @@
 fluid_sim.exe
 shaders_fluid/*/*.spv
+glfw3.dll
