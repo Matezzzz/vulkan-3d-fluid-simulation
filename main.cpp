@@ -177,7 +177,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "04_update_active",
+            fluid_context, "04_update_air",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
