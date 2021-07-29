@@ -23,7 +23,6 @@ just-a-vulkan-library/libJAVL.a : just-a-vulkan-library/vulkan_include_all.h jus
 
 ACCEPTED_SHADER_EXTS = .comp .frag .vert .tese .tesc .geom
 SHADER_WILDCARD_STRINGS = $(addprefix $(SHADER_DIR)/*/*, $(ACCEPTED_SHADER_EXTS))
-$(info $(wildcard $(SHADER_WILDCARD_STRINGS)))
 
 shaders : $(wildcard $(SHADER_WILDCARD_STRINGS))
 	cd $(SHADER_DIR) && python build_shaders.py

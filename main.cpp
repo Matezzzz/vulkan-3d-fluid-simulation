@@ -145,7 +145,7 @@ int main()
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue(CELL_INACTIVE)),
         new FlowComputeSection(
-            fluid_context, "01a_clear_densities",
+            fluid_context, "01_clear_densities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -155,7 +155,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "01b_update_densities",
+            fluid_context, "02_update_densities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -166,7 +166,7 @@ int main()
             particle_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "01c_update_water",
+            fluid_context, "03_update_water",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -177,7 +177,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "02_update_active",
+            fluid_context, "04_update_active",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -187,7 +187,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "03_compute_extrapolated_velocities",
+            fluid_context, "05_compute_extrapolated_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -199,7 +199,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "04_set_extrapolated_velocities",
+            fluid_context, "06_set_extrapolated_velocities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -212,7 +212,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "05_update_cell_types",
+            fluid_context, "07_update_cell_types",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -223,7 +223,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "06_advect",
+            fluid_context, "08_advect",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -235,7 +235,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "07_forces",
+            fluid_context, "09_forces",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -246,7 +246,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "08_diffuse",
+            fluid_context, "10_diffuse",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -258,7 +258,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "09_solids",
+            fluid_context, "11_solids",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -269,7 +269,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "10_prepare_pressure",
+            fluid_context, "12_prepare_pressure",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -286,7 +286,7 @@ int main()
 
 
     auto pressure_section = new FlowComputePushConstantSection(
-        fluid_context, "11_solve_pressure",
+        fluid_context, "13_solve_pressure",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
@@ -301,12 +301,9 @@ int main()
     SectionList pressure_solve_section_list(pressure_section);
 
 
-
-
-
     SectionList draw_section_list_2{
         new FlowComputeSection(
-            fluid_context, "12_fix_divergence",
+            fluid_context, "14_fix_divergence",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -318,7 +315,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "13_particles",
+            fluid_context, "15_particles",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -342,7 +339,7 @@ int main()
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
     auto render_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "14_render",
+        fluid_context, "16_render",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
@@ -391,14 +388,22 @@ int main()
     glm::mat4 projection = glm::perspective(glm::radians(45.f), 1.f*window.getWidth() / window.getHeight(), 0.1f, 200.f) * invert_y_mat;
     glm::mat4 MVP;
 
-    // * Structure to watch status of currently sent frame *
-    SubmitSynchronization frame_synchronization;
-    Fence frame_done_fence;
-    frame_synchronization.setEndFence(frame_done_fence);
 
-    queue.submit(init_buffer, frame_synchronization);
-    frame_synchronization.waitFor(SYNC_FRAME);
+    Semaphore draw_end_semaphore;
 
+    // * Structures to watch status of currently sent frame *
+    SubmitSynchronization draw_synchronization;
+    draw_synchronization.addEndSemaphore(draw_end_semaphore);
+
+    SubmitSynchronization render_synchronization;
+    render_synchronization.addStartSemaphore(draw_end_semaphore);
+    render_synchronization.setEndFence(Fence());
+
+    SubmitSynchronization init_sync;
+    init_sync.setEndFence(Fence());
+    queue.submit(init_buffer, init_sync);
+    init_sync.waitFor(SYNC_FRAME);
+    
     FlowCommandBuffer render_command_buffer(render_command_pool);
     FlowCommandBuffer draw_buffer(render_command_pool);
 
@@ -424,7 +429,7 @@ int main()
             draw_buffer.record(flow_context, draw_section_list_2);
             draw_buffer.endRecord();
         
-            queue.submit(draw_buffer, frame_synchronization);
+            queue.submit(draw_buffer, draw_synchronization);
         }
         
 
@@ -451,8 +456,8 @@ int main()
         
         // * Submit command buffer and wait for it to finish*
         swapchain.prepareToDraw();
-        queue.submit(render_command_buffer, frame_synchronization);
-        frame_synchronization.waitFor(SYNC_FRAME);
+        queue.submit(render_command_buffer, render_synchronization);
+        render_synchronization.waitFor(SYNC_FRAME);
         
         // * Present rendered image and reset buffer for next frame *
         swapchain.presentImage(swapchain_image, present_queue);
