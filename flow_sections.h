@@ -170,6 +170,16 @@ public:
 };
 
 
+
+class FlowUniformBuffer : public FlowPipelineSectionDescriptorUsage{
+public:
+    FlowUniformBuffer(const string& name, int descriptor_index, DescriptorUsageStage usage_stages, BufferState buf_state) :
+        FlowPipelineSectionDescriptorUsage(descriptor_index, usage_stages, buf_state,
+            UniformBufferUpdateInfo{name, VK_NULL_HANDLE})
+    {}
+};
+
+
 class FlowStorageBuffer : public FlowPipelineSectionDescriptorUsage{
 public:
     FlowStorageBuffer(const string& name, int descriptor_index, DescriptorUsageStage usage_stages, BufferState buf_state) :

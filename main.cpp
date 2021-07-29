@@ -9,6 +9,8 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "marching_cubes.h"
+
 using std::vector;
 using std::string;
 
@@ -51,8 +53,9 @@ int main()
     PhysicalDevice physical_device = PhysicalDevices(instance).choose();
 
     // * Create logical device *
-    Device& device = physical_device.requestExtensions({VK_KHR_SWAPCHAIN_EXTENSION_NAME})\
-        .requestScreenSupportQueues({{2, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT}}, window)\
+    Device& device = physical_device.requestExtensions({VK_KHR_SWAPCHAIN_EXTENSION_NAME})
+        .requestFeatures(PhysicalDeviceFeatures().enableGeometryShader())
+        .requestScreenSupportQueues({{2, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT}}, window)
         .createLogicalDevice(instance);
     
     // * Get references to requested queues *
@@ -67,10 +70,10 @@ int main()
     CommandPool render_command_pool = CommandPoolInfo{0, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT}.create();
 
     // * Create local object creator -  used to copy data from RAM to GPU * 
-    //uint32_t image_width = 1024;
-    //uint32_t image_height = 1024;
-    //const uint32_t max_image_or_buffer_size_bytes = 4*image_width*image_height;
-    //LocalObjectCreator device_local_buffer_creator{queue, max_image_or_buffer_size_bytes};
+    const uint32_t max_image_or_buffer_size_bytes = 256 * 15 * 4;
+    LocalObjectCreator device_local_buffer_creator{queue, max_image_or_buffer_size_bytes};
+
+    MarchingCubesBuffers marching_cubes;
 
 
     // * Creating an image on the GPU *
@@ -90,25 +93,28 @@ int main()
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ExtImage float_densities_img = pressures_image_info.create(); //same here
 
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    marching_cubes.loadData(device_local_buffer_creator);
 
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
-        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, IMAGE_COUNT
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_FLOAT, IMAGE_COUNT
     };
     enum BufferAttachments{
-        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, BUFFER_COUNT
+        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, BUFFER_COUNT
     };
 
     DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     FlowBufferContext flow_context{
-        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img},
+        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img},
         vector<PipelineImageState>(IMAGE_COUNT, PipelineImageState{ImageState{IMAGE_NEWLY_CREATED}}),
-        {particles_buffer, densities_buffer},
+        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer},
         vector<PipelineBufferState>(BUFFER_COUNT, PipelineBufferState{BufferState{BUFFER_NEWLY_CREATED}})
     };    
 
@@ -324,6 +330,17 @@ int main()
                 }
             },
             particle_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17_compute_float_densities",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_UNIFORM}},
+                    FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, usage_compute, ImageState{IMAGE_STORAGE_R}}
+                }
+            }, 
+            fluid_dispatch_size
         )
     };
 
@@ -358,9 +375,20 @@ int main()
         },
         8000, render_pipeline_info, render_pass
     );
+    auto render_surface_section = new FlowGraphicsPushConstantSection(
+        fluid_context, "18_render_surface",
+        FlowPipelineSectionDescriptors{
+            flow_context,
+            vector<FlowPipelineSectionDescriptorUsage>{
+                FlowUniformBuffer{"triangle_counts", MARCHING_CUBES_COUNTS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
+                FlowUniformBuffer{"triangle_vertices", MARCHING_CUBES_EDGES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
+                FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
+            }
+        },
+        19*19*19, render_pipeline_info, render_pass
+    );
 
-
-    SectionList render_section_list(render_section, display_data_section);
+    SectionList render_section_list(render_section, display_data_section, render_surface_section);
 
 
     fluid_context.createDescriptorPool();
@@ -443,6 +471,7 @@ int main()
         );
         render_section->transitionAllImages(render_command_buffer, flow_context);
         display_data_section->transitionAllImages(render_command_buffer, flow_context);
+        render_surface_section->transitionAllImages(render_command_buffer, flow_context);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
 
         MVP = projection * camera.view_matrix;
@@ -450,6 +479,8 @@ int main()
         render_section->execute(render_command_buffer);
         display_data_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
         display_data_section->execute(render_command_buffer);
+        render_surface_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+        render_surface_section->execute(render_command_buffer);
         render_command_buffer.cmdEndRenderPass();
         render_command_buffer.endRecord();
         
