@@ -1,0 +1,34 @@
+#version 450
+
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+
+
+layout(set = 0, binding = 0) buffer restrict readonly particle_densities{
+    int particle_dens[8000];
+};
+layout(set = 0, binding = 1, r8ui) uniform restrict writeonly uimage3D cell_types;
+
+
+
+const int fluid_width = 20;
+const int fluid_height = 20;
+const int fluid_depth = 20;
+
+
+int getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_height) * fluid_width;
+}
+
+const int CELL_AIR = 1;
+const int CELL_WATER = 2;
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    int type;
+    if (particle_dens[getIndex(i)] > 0){
+        type = CELL_WATER;
+    }else{
+        type = CELL_AIR;
+    }
+    imageStore(cell_types, i, ivec4(type, 0, 0, 0));
+}
