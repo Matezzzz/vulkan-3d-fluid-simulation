@@ -25,7 +25,7 @@ const int CELL_WATER = 2;
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     int type;
-    if (particle_dens[getIndex(i)] >= 100){
+    if (particle_dens[getIndex(i)] > 0){
         type = CELL_WATER;
     }else{
         type = CELL_AIR;
