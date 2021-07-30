@@ -334,7 +334,7 @@ int main()
             particle_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "17a_compute_densities_inertia",
+            fluid_context, "16_compute_densities_inertia",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -345,7 +345,7 @@ int main()
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "17b_compute_float_densities",
+            fluid_context, "17_compute_float_densities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
@@ -370,7 +370,7 @@ int main()
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
     render_pipeline_info.getDepthStencilInfo().enableDepthTest().enableDepthWrite();
     auto render_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "16_render",
+        fluid_context, "18_render_particles",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
@@ -378,6 +378,18 @@ int main()
             }
         },
         max_particle_count, render_pipeline_info, render_pass
+    );
+    auto render_surface_section = new FlowGraphicsPushConstantSection(
+        fluid_context, "19_render_surface",
+        FlowPipelineSectionDescriptors{
+            flow_context,
+            vector<FlowPipelineSectionDescriptorUsage>{
+                FlowUniformBuffer{"triangle_counts", MARCHING_CUBES_COUNTS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
+                FlowUniformBuffer{"triangle_vertices", MARCHING_CUBES_EDGES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
+                FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
+            }
+        },
+        19*19*19, render_pipeline_info, render_pass
     );
     auto display_data_section = new FlowGraphicsPushConstantSection(
         fluid_context, "20_display_data",
@@ -389,18 +401,7 @@ int main()
         },
         8000, render_pipeline_info, render_pass
     );
-    auto render_surface_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "18_render_surface",
-        FlowPipelineSectionDescriptors{
-            flow_context,
-            vector<FlowPipelineSectionDescriptorUsage>{
-                FlowUniformBuffer{"triangle_counts", MARCHING_CUBES_COUNTS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
-                FlowUniformBuffer{"triangle_vertices", MARCHING_CUBES_EDGES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
-                FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
-            }
-        },
-        19*19*19, render_pipeline_info, render_pass
-    );
+    
 
     SectionList render_section_list(render_section, display_data_section, render_surface_section);
 
