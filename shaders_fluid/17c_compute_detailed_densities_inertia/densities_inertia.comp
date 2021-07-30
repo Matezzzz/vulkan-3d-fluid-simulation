@@ -27,7 +27,7 @@ int getIndex(ivec3 pos){
 
 ivec3 moves[6] = ivec3[](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1), ivec3(-1, 0, 0), ivec3(0, -1, 0), ivec3(0, 0, -1));
 
-const int max_inertia = 500;
+const int max_inertia = 100;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
@@ -38,7 +38,7 @@ void main(){
 
     if (inertia < max_inertia){
         if (particle_dens[i_] > 0){
-            inertia += 20;
+            inertia += 4;
         }
         int hit_count = 0;
         for (int j = 0; j < 6; j++){
@@ -46,8 +46,8 @@ void main(){
                 hit_count += 1;
             }
         }
-        if (hit_count >= 2) inertia += hit_count * 10;
+        if (hit_count >= 2) inertia += hit_count * 2;
     }
-    if (inertia == old_inertia && inertia >= 0) inertia -= 5;
+    if (inertia == old_inertia && inertia >= 0) inertia -= 1;
     dens_inertia[i_] = inertia;
 }

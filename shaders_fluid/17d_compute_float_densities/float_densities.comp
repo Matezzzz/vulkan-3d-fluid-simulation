@@ -16,7 +16,7 @@ layout(set = 0, binding = 0) buffer restrict readonly densities_inertia{
 layout(set = 0, binding = 1, r32f) uniform restrict writeonly image3D float_densities;
 
 
-const float dens_division_coeff = 30.0;
+const float dens_division_coeff = 20.0;
 
 int getIndex(ivec3 pos){
     return pos.x + (pos.y + pos.z * fluid_height * detailed_resolution) * fluid_width * detailed_resolution;
