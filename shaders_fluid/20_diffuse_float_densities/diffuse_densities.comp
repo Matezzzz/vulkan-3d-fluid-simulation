@@ -1,0 +1,51 @@
+#version 450
+
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r32ui)uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 1, r32f) uniform restrict readonly  image3D densities_1;
+layout(set = 0, binding = 2, r32f) uniform restrict writeonly image3D densities_2;
+
+layout (push_constant) uniform constants{
+    uint is_even_iteration;
+};
+
+
+const int detailed_resolution = 4;
+const float diffuse_a = 0.1;
+const int CELL_SOLID = 3;
+
+
+uint cellAt(ivec3 i){
+    return imageLoad(cell_types, i).x;
+}
+bool isSolid(uint a){
+    return (a == CELL_SOLID);
+}
+
+
+float getDensity1(ivec3 pos){
+    return imageLoad(densities_1, pos).x;
+}
+float getDensity2(ivec3 pos){
+    return imageLoad(densities_2, pos).x;
+}
+
+#define diffuse(getDensity, densities_dst)\
+float d = ( 1.0 - 6 * diffuse_a) * getDensity(i) + diffuse_a * \
+    (getDensity(i + ivec3(1, 0, 0)) + getDensity(i - ivec3(1, 0, 0)) + \
+     getDensity(i + ivec3(0, 1, 0)) + getDensity(i - ivec3(0, 1, 0)) + \
+     getDensity(i + ivec3(0, 0, 1)) + getDensity(i - ivec3(0, 0, 1))); \
+imageStore(densities_dst, i, vec4(d, 0.0, 0.0, 0.0));
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+
+    if (!isSolid(cellAt(i / detailed_resolution))){
+        if (is_even_iteration == 0){
+            diffuse(getDensity1, densities_2)
+        }else{
+            diffuse(getDensity2, densities_1)
+        }
+    }
+}

@@ -19,7 +19,7 @@ const float time_delta = 0.01;
 const float cell_width = 1;
 
 layout(push_constant) uniform constants{
-    uint isEvenIteration;
+    uint is_even_iteration;
 };
 
 
@@ -52,7 +52,7 @@ void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     uint t = imageLoad(cell_types, i).x;
     if (t == CELL_WATER){
-        if (isEvenIteration == 1){
+        if (is_even_iteration == 1){
             computePressure(pressures_1, pressures_2)
         }else{
             computePressure(pressures_2, pressures_1)
