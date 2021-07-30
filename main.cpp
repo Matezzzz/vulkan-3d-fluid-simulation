@@ -145,7 +145,7 @@ int main()
                 }
             },
             Size3{1, 256, 1}
-        ),
+        )
     };
 
     
@@ -359,7 +359,7 @@ int main()
 
 
     // * Create a render pass *
-    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat()}.create();
+    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}.create();
     RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
 
     // * Create framebuffers for all swapchain images *
@@ -413,6 +413,9 @@ int main()
     init_sections.complete();
     init_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     init_buffer.record(flow_context, init_sections);
+    init_buffer.cmdBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 
+        depth_test_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_DEPTH_STENCIL_ATTACHMENT})    
+    );
     init_buffer.endRecord();    
 
     draw_section_list_1.complete();
