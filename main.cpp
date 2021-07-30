@@ -26,15 +26,23 @@ Size3 fluid_local_group_size{10, 10, 1};
 Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 
 
-constexpr uint32_t particle_batch_count = 256;
-constexpr uint32_t particles_per_batch = 256;
-Size3 particle_local_group_size{particles_per_batch, 1, 1};
-constexpr uint32_t max_particle_count = particle_batch_count*particles_per_batch;
-Size3 particle_dispatch_size = Size3{max_particle_count, 1, 1} / particle_local_group_size;
+
+Size3 particle_space_size{256*256, 1, 1};
+Size3 particle_local_group_size{256, 1, 1};
+Size3 particle_dispatch_size = particle_space_size / particle_local_group_size;
+
+const int detailed_densities_resolution = 4;
+Size3 detailed_densities_size = fluid_size * detailed_densities_resolution;
+Size3 detailed_densities_local_group_size{10, 10, 1};
+Size3 detailed_densities_dispatch_size = detailed_densities_size / detailed_densities_local_group_size;
+
 
 const float pressure_air = 1.0;
 
 constexpr uint32_t divergence_solve_iterations = 100;
+
+
+
 
 
 int main()
@@ -85,38 +93,44 @@ int main()
     ExtImage cell_types_img = cell_type_image_info.create();
     ExtImage cell_types_new_img = cell_type_image_info.create();
 
-    Buffer particles_buffer = BufferInfo(max_particle_count * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
-    Buffer densities_buffer = BufferInfo(fluid_width*fluid_height*fluid_depth * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
-    Buffer densities_inertia_buffer = BufferInfo(fluid_width*fluid_height*fluid_depth * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
+    Buffer particles_buffer = BufferInfo(particle_space_size.volume() * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
+    Buffer densities_buffer = BufferInfo(fluid_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
+    
+    BufferInfo detailed_densities_info(detailed_densities_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    Buffer detailed_densities_buffer = detailed_densities_info.create();
+    Buffer detailed_densities_inertia_buffer = detailed_densities_info.create();
+
 
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
-    ExtImage float_densities_img = pressures_image_info.create(); //same here
+    ExtImage float_densities_1_img = ImageInfo(fluid_width*detailed_densities_resolution, fluid_height*detailed_densities_resolution, fluid_depth*detailed_densities_resolution, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+    ExtImage float_densities_2_img = ImageInfo(fluid_width*detailed_densities_resolution, fluid_height*detailed_densities_resolution, fluid_depth*detailed_densities_resolution, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
+
 
     ExtImage depth_test_image = ImageInfo(screen_width, screen_height, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT).create();
 
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, densities_inertia_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     marching_cubes.loadData(device_local_buffer_creator);
 
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
-        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_FLOAT, IMAGE_COUNT
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
     };
     enum BufferAttachments{
-        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, DENSITIES_INERTIA_BUF, BUFFER_COUNT
+        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, DETAILED_DENSITIES_BUF, DENSITIES_INERTIA_BUF, BUFFER_COUNT
     };
 
     DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     FlowBufferContext flow_context{
-        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img},
+        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img},
         vector<PipelineImageState>(IMAGE_COUNT, PipelineImageState{ImageState{IMAGE_NEWLY_CREATED}}),
-        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, densities_inertia_buffer},
+        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer},
         vector<PipelineBufferState>(BUFFER_COUNT, PipelineBufferState{BufferState{BUFFER_NEWLY_CREATED}})
     };    
 
@@ -334,27 +348,84 @@ int main()
             particle_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "16_compute_densities_inertia",
+            fluid_context, "17a_clear_detailed_densities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
-                    FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}},
+                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}},
                 }
             }, 
-            fluid_dispatch_size
+            detailed_densities_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "17_compute_float_densities",
+            fluid_context, "17b_update_detailed_densities",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
+                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
+                }
+            }, 
+            particle_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17c_compute_detailed_densities_inertia",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
+                    FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
+                }
+            }, 
+            detailed_densities_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17d_compute_float_densities",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
                     FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
-                    FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, usage_compute, ImageState{IMAGE_STORAGE_R}}
+                    FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 }
             }, 
-            fluid_dispatch_size
-        )
+            detailed_densities_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17e_diffuse_float_densities",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                }
+            }, 
+            detailed_densities_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17e_diffuse_float_densities",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                }
+            }, 
+            detailed_densities_dispatch_size
+        ),
+        new FlowComputeSection(
+            fluid_context, "17e_diffuse_float_densities",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                }
+            }, 
+            detailed_densities_dispatch_size
+        ),
     };
 
 
@@ -377,7 +448,7 @@ int main()
                 FlowStorageBuffer{"particles", PARTICLES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_R}}
             }
         },
-        max_particle_count, render_pipeline_info, render_pass
+        particle_space_size.volume(), render_pipeline_info, render_pass
     );
     auto render_surface_section = new FlowGraphicsPushConstantSection(
         fluid_context, "19_render_surface",
@@ -386,10 +457,10 @@ int main()
             vector<FlowPipelineSectionDescriptorUsage>{
                 FlowUniformBuffer{"triangle_counts", MARCHING_CUBES_COUNTS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
                 FlowUniformBuffer{"triangle_vertices", MARCHING_CUBES_EDGES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
-                FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
+                FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT_2, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
             }
         },
-        19*19*19, render_pipeline_info, render_pass
+        79*79*79, render_pipeline_info, render_pass
     );
     auto display_data_section = new FlowGraphicsPushConstantSection(
         fluid_context, "20_display_data",

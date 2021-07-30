@@ -1,0 +1,30 @@
+#version 450
+
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+
+
+const int fluid_width = 20;
+const int fluid_height = 20;
+const int fluid_depth = 20;
+const int fluid_volume = fluid_width*fluid_height*fluid_depth;
+const int detailed_resolution = 4;
+const int detailed_resolution_volume = fluid_volume*detailed_resolution*detailed_resolution*detailed_resolution;
+
+layout(set = 0, binding = 0) buffer restrict readonly densities_inertia{
+    int dens_inertia[512000];
+};
+layout(set = 0, binding = 1, r32f) uniform restrict writeonly image3D float_densities;
+
+
+const float dens_division_coeff = 30.0;
+
+int getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_height * detailed_resolution) * fluid_width * detailed_resolution;
+}
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    int dens = dens_inertia[getIndex(i)];
+    float d = (dens == 0) ? -1 : dens / dens_division_coeff;
+    imageStore(float_densities, i, vec4(d, 0, 0, 0));
+}

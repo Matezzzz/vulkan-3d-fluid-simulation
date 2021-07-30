@@ -1,6 +1,10 @@
 #version 450
 #extension GL_EXT_scalar_block_layout : require
 
+
+const int detailed_resolution = 4;
+
+
 layout(points) in;
 layout(triangle_strip, max_vertices=15) out;
 
@@ -40,7 +44,7 @@ void renderTriangle(float[8] densities, int edge_indices_offset){
         uint edge_index = vertex_edge_indices[edge_indices_offset+i];
         ivec2 edge = edges[edge_index];
         float a = densities[edge[0]] / (densities[edge[0]] - densities[edge[1]]);
-        points[i] = vec3(0.5, 0.5, 0.5) + pos[0] + moves[edge[0]] + (moves[edge[1]] - moves[edge[0]]) * a;
+        points[i] = (vec3(0.5, 0.5, 0.5) + pos[0] + moves[edge[0]] + (moves[edge[1]] - moves[edge[0]]) * a) / detailed_resolution;
     }
     vec3 N = normalize(cross(points[1] - points[0], points[2] - points[0]));
     for (int i = 0; i < 3; i++){

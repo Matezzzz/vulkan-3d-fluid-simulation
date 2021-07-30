@@ -1,0 +1,32 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+const int fluid_width = 20;
+const int fluid_height = 20;
+const int fluid_depth = 20;
+const int fluid_volume = fluid_width*fluid_height*fluid_depth;
+const int detailed_resolution = 4;
+const int detailed_resolution_volume = fluid_volume*detailed_resolution*detailed_resolution*detailed_resolution;
+
+
+layout(set = 0, binding = 0) buffer restrict readonly particles{
+    vec4 particle_positions[65536];
+};
+layout(set = 0, binding = 1) buffer restrict coherent particle_densities{
+    int particle_dens[512000];
+};
+
+
+
+int getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_height*detailed_resolution) * fluid_width*detailed_resolution;
+}
+
+void main(){
+    int i = int(gl_GlobalInvocationID.x);
+    vec4 pos = particle_positions[i];
+    if (pos.w == 1.0){
+        atomicAdd(particle_dens[getIndex(ivec3(pos.xyz * detailed_resolution))], 1);
+    }
+}

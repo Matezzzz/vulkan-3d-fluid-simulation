@@ -1,0 +1,53 @@
+#version 450
+
+
+const int fluid_width = 20;
+const int fluid_height = 20;
+const int fluid_depth = 20;
+const int fluid_volume = fluid_width*fluid_height*fluid_depth;
+const int detailed_resolution = 4;
+const int detailed_resolution_volume = fluid_volume*detailed_resolution*detailed_resolution*detailed_resolution;
+
+
+
+
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+
+
+layout(set = 0, binding = 0) buffer restrict readonly particle_densities{
+    int particle_dens[512000];
+};
+layout(set = 0, binding = 1) buffer restrict densities_inertia{
+    int dens_inertia[512000];
+};
+
+int getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_height*detailed_resolution) * fluid_width*detailed_resolution;
+}
+
+ivec3 moves[6] = ivec3[](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1), ivec3(-1, 0, 0), ivec3(0, -1, 0), ivec3(0, 0, -1));
+
+const int max_inertia = 500;
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    int i_ = getIndex(i);
+
+    int inertia = dens_inertia[i_];
+    int old_inertia = inertia;
+
+    if (inertia < max_inertia){
+        if (particle_dens[i_] > 0){
+            inertia += 20;
+        }
+        int hit_count = 0;
+        for (int j = 0; j < 6; j++){
+            if (particle_dens[getIndex(i + moves[j])] > 0){
+                hit_count += 1;
+            }
+        }
+        if (hit_count >= 2) inertia += hit_count * 10;
+    }
+    if (inertia == old_inertia && inertia >= 0) inertia -= 5;
+    dens_inertia[i_] = inertia;
+}

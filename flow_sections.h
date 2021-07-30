@@ -19,6 +19,12 @@ struct Size3{
     Size3 operator/(const Size3& s) const{
         return Size3{x / s.x, y / s.y, z / s.z};
     }
+    uint32_t volume(){
+        return x * y * z;
+    }
+    Size3 operator*(uint32_t k){
+        return Size3{k * x, k * y, k * z};
+    }
 };
 
 
