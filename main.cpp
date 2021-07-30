@@ -16,7 +16,7 @@ using std::string;
 
 uint32_t screen_width = 1400;
 uint32_t screen_height = 1400;
-string app_name = "Hello Vulkan :)";
+string app_name = "Vulkan fluid simulation";
 
 
 
@@ -41,7 +41,7 @@ const float pressure_air = 1.0;
 
 constexpr uint32_t divergence_solve_iterations = 100;
 
-
+constexpr uint32_t float_density_diffuse_steps = 10;
 
 
 
@@ -390,30 +390,6 @@ int main()
             }, 
             detailed_densities_dispatch_size
         ),
-        new FlowComputeSection(
-            fluid_context, "17e_diffuse_float_densities",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
-                }
-            }, 
-            detailed_densities_dispatch_size
-        ),
-        new FlowComputeSection(
-            fluid_context, "17e_diffuse_float_densities",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_R}},
-                    FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
-                }
-            }, 
-            detailed_densities_dispatch_size
-        ),
     };
 
     auto float_densities_diffuse_section = new FlowComputePushConstantSection(
@@ -422,13 +398,13 @@ int main()
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
                 FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowStorageImage{"densities_src", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
-                FlowStorageImage{"densities_dst", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
+                FlowStorageImage{"densities_1", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                FlowStorageImage{"densities_2", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
             }
         }, 
         detailed_densities_dispatch_size
     );
-
+    SectionList float_densities_diffuse_section_list(float_densities_diffuse_section);
 
     // * Create a render pass *
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}.create();
@@ -493,6 +469,7 @@ int main()
     draw_section_list_1.complete();
     pressure_solve_section_list.complete();
     draw_section_list_2.complete();
+    float_densities_diffuse_section_list.complete();
     render_section_list.complete();
 
     
@@ -545,6 +522,12 @@ int main()
             }
             
             draw_buffer.record(flow_context, draw_section_list_2);
+
+            for (uint32_t i = 0; i < float_density_diffuse_steps; i++){
+                float_densities_diffuse_section->getPushConstantData().write("is_even_iteration", (i % 2 == 0) ? 1U : 0U);
+                draw_buffer.record(flow_context, float_densities_diffuse_section_list);
+            }
+
             draw_buffer.endRecord();
         
             queue.submit(draw_buffer, draw_synchronization);
