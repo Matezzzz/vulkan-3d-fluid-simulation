@@ -95,7 +95,9 @@ int main()
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
     ExtImage float_densities_img = pressures_image_info.create(); //same here
 
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ExtImage depth_test_image = ImageInfo(screen_width, screen_height, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT).create();
+
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     marching_cubes.loadData(device_local_buffer_creator);
@@ -346,15 +348,16 @@ int main()
 
 
     // * Create a render pass *
-    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}.create();
+    VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat()}.create();
     RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
 
     // * Create framebuffers for all swapchain images *
-    swapchain.createFramebuffers(render_pass);
+    swapchain.createFramebuffers(render_pass, depth_test_image);
 
 
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+    render_pipeline_info.getDepthStencilInfo().enableDepthTest().enableDepthWrite();
     auto render_section = new FlowGraphicsPushConstantSection(
         fluid_context, "16_render",
         FlowPipelineSectionDescriptors{

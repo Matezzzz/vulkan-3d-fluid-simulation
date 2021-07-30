@@ -6,9 +6,8 @@ layout(triangle_strip, max_vertices=15) out;
 
 layout(location = 0) in ivec3 pos[];
 
-layout(location = 0) out vec3 color;
-layout(location = 1) out int o_triangle_variant;
-layout(location = 2) out uint o_debug_value;
+layout(location = 0) out vec3 normal;
+
 
 layout(set = 0, binding = 0, std430) uniform triangle_counts{
     uint counts[256];
@@ -35,6 +34,24 @@ ivec2 edges[12] = ivec2[](
 );
 
 
+void renderTriangle(float[8] densities, int edge_indices_offset){
+    vec3 points[3];
+    for (int i = 0; i < 3; i++){
+        uint edge_index = vertex_edge_indices[edge_indices_offset+i];
+        ivec2 edge = edges[edge_index];
+        float a = densities[edge[0]] / (densities[edge[0]] - densities[edge[1]]);
+        points[i] = vec3(0.5, 0.5, 0.5) + pos[0] + moves[edge[0]] + (moves[edge[1]] - moves[edge[0]]) * a;
+    }
+    vec3 N = normalize(cross(points[1] - points[0], points[2] - points[0]));
+    for (int i = 0; i < 3; i++){
+        gl_Position = MVP * vec4(points[i], 1.0);
+        normal = N;
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+
+
 void main(){
     int triangle_variant = 0;
     float densities[8];
@@ -42,24 +59,8 @@ void main(){
         densities[i] = getDensity(pos[0] + moves[i]);
         triangle_variant |= int(densities[i] > 0) << i;
     }
-    o_triangle_variant = triangle_variant;
     uint triangle_count = counts[triangle_variant];
-    o_debug_value = counts[0];
-    for (int i = 0; i < 3*triangle_count; i++){
-        uint edge_index = vertex_edge_indices[triangle_variant*15+i];
-        ivec2 edge = edges[edge_index];
-        float a = densities[edge[0]] / (densities[edge[0]] - densities[edge[1]]);
-        vec3 pos = vec3(0.5, 0.5, 0.5) + pos[0] + moves[edge[0]] + (moves[edge[1]] - moves[edge[0]]) * a;
-        gl_Position = MVP * vec4(pos, 1.0);
-
-        if (edge_index == 255){
-            color = vec3(triangle_count / 10.0, 0, 0);
-        }else if(0 < a && a < 1){
-            color = vec3(1, 1, 1);
-        }else{
-            color = vec3(0, 0, 0);
-        }
-        EmitVertex();
-        if (i % 3 == 2) EndPrimitive();
+    for (int i = 0; i < triangle_count; i++){
+        renderTriangle(densities, triangle_variant * 15 + i * 3);
     }
 }

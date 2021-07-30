@@ -20,6 +20,6 @@ int getIndex(ivec3 pos){
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     int dens = particle_dens[getIndex(i)];
-    float d = (dens == 0) ? -1 : dens / 100.0;
+    float d = (dens == 0) ? -1 : dens / 30.0;
     imageStore(float_densities, i, vec4(d, 0, 0, 0));
 }
