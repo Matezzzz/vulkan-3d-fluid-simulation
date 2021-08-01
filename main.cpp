@@ -41,7 +41,7 @@ const float pressure_air = 1.0;
 
 constexpr uint32_t divergence_solve_iterations = 100;
 
-constexpr uint32_t float_density_diffuse_steps = 10;
+constexpr uint32_t float_density_diffuse_steps = 4;
 
 
 
