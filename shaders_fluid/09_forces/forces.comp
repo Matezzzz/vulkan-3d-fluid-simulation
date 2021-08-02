@@ -33,7 +33,7 @@ void main(){
         }
     }
     if (i.x == 10 && i.y == 18 && i.z == 10 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.x -= 750 ;
+        force.y -= 4000;
     }
     /*if (i.x == 15 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
         force.y -= 4000;
