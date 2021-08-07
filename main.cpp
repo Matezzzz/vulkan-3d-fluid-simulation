@@ -101,6 +101,10 @@ int main()
     Buffer detailed_densities_inertia_buffer = detailed_densities_info.create();
 
 
+    UniformBufferRawDataSTD140 fluid_params_uniform_buffer;
+    fluid_params_uniform_buffer.writeIVec3((int32_t*) &fluid_size);
+
+
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();

@@ -14,7 +14,7 @@ const float gravity = 10;
 uint cellAt(ivec3 i){
     return imageLoad(cell_types, i).x;
 }
-//if air cells are considered active as well, can create interesting forces that swirl the fluid around
+
 bool isActive(uint type){
     return (type == CELL_WATER);
 }

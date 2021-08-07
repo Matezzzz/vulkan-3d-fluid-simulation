@@ -7,9 +7,6 @@ layout(set = 0, binding = 0) buffer restrict writeonly particles{
 };
 
 
-const uint particles_per_batch = 256;
-const uint batch_count = 256;
-const uint max_particle_count = particles_per_batch*batch_count;
 const uint particles_per_row = 256;
 
 void main(){
