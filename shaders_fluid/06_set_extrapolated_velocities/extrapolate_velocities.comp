@@ -1,16 +1,16 @@
 #version 450
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 20) int cell_type_air;
+    layout(offset = 24) int cell_type_water;
+};
+layout(set = 0, binding = 1, r8ui) uniform restrict readonly uimage3D new_cell_types;
+layout(set = 0, binding = 2, r8ui) uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 3, rgba32f) uniform restrict image3D velocities;
+layout(set = 0, binding = 4, rgba32f) uniform restrict readonly image3D extrapolated_velocitites;
 
-layout(set = 0, binding = 0, r8ui) uniform restrict readonly uimage3D new_cell_types;
-layout(set = 0, binding = 1, r8ui) uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
-layout(set = 0, binding = 3, rgba32f) uniform restrict readonly image3D extrapolated_velocitites;
 
-const uint CELL_INACTIVE = 0;
-const uint CELL_AIR = 1;
-const uint CELL_WATER = 2;
-const uint CELL_SOLID = 3;
 
 
 uint oldCellAt(ivec3 pos){
@@ -22,10 +22,10 @@ uint newCellAt(ivec3 pos){
 }
 
 bool isAir(uint a){
-    return (a == CELL_AIR);
+    return (a == cell_type_air);
 }
 bool isWater(uint a){
-    return (a == CELL_WATER);
+    return (a == cell_type_water);
 }
 bool isActive(uint a){
     return (isWater(a) || isAir(a));

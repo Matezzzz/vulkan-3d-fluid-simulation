@@ -3,23 +3,22 @@
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 
-const int fluid_width = 20;
-const int fluid_height = 20;
-const int fluid_depth = 20;
-const int fluid_volume = fluid_width*fluid_height*fluid_depth;
-const int detailed_resolution = 4;
-const int detailed_resolution_volume = fluid_volume*detailed_resolution*detailed_resolution*detailed_resolution;
 
-layout(set = 0, binding = 0) buffer restrict readonly densities_inertia{
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;
+    layout(offset = 116) int detailed_resolution;
+    layout(offset = 144) float dens_division_coefficient;
+};
+layout(set = 0, binding = 1) buffer restrict readonly densities_inertia{
     int dens_inertia[512000];
 };
-layout(set = 0, binding = 1, r32f) uniform restrict writeonly image3D float_densities;
+layout(set = 0, binding = 2, r32f) uniform restrict writeonly image3D float_densities;
 
 
 const float dens_division_coeff = 20.0;
 
-int getIndex(ivec3 pos){
-    return pos.x + (pos.y + pos.z * fluid_height * detailed_resolution) * fluid_width * detailed_resolution;
+uint getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_size.y * detailed_resolution) * fluid_size.x * detailed_resolution;
 }
 
 void main(){

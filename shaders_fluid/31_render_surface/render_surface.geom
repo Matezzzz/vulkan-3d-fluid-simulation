@@ -2,7 +2,6 @@
 #extension GL_EXT_scalar_block_layout : require
 
 
-const int detailed_resolution = 4;
 
 
 layout(points) in;
@@ -12,14 +11,16 @@ layout(location = 0) in ivec3 pos[];
 
 layout(location = 0) out vec3 normal;
 
-
-layout(set = 0, binding = 0, std430) uniform triangle_counts{
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 116) int detailed_resolution;
+};
+layout(set = 0, binding = 1, std430) uniform triangle_counts{
     uint counts[256];
 };
-layout(set = 0, binding = 1, std430) uniform triangle_vertices{
+layout(set = 0, binding = 2, std430) uniform triangle_vertices{
     uint vertex_edge_indices[15*256];
 };
-layout(set = 0, binding = 2, r32f) uniform restrict readonly image3D float_densities;
+layout(set = 0, binding = 3, r32f) uniform restrict readonly image3D float_densities;
 
 float getDensity(ivec3 index){
     return imageLoad(float_densities, index).r;

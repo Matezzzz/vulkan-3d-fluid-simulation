@@ -3,13 +3,15 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui)    uniform readonly restrict uimage3D cell_types;
-layout(set = 0, binding = 1)          uniform sampler3D velocities_src;
-layout(set = 0, binding = 2, rgba32f) uniform writeonly restrict image3D velocities_dst;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 20) int cell_type_air;
+    layout(offset = 24) int cell_type_water;
+    layout(offset = 32) float time_delta;
+};
+layout(set = 0, binding = 1, r8ui)    uniform readonly restrict uimage3D cell_types;
+layout(set = 0, binding = 2)          uniform sampler3D velocities_src;
+layout(set = 0, binding = 3, rgba32f) uniform writeonly restrict image3D velocities_dst;
 
-const uint CELL_AIR = 1;
-const uint CELL_WATER = 2;
-const float time_delta = 0.01;
 
 
 
@@ -17,10 +19,10 @@ uint cellAt(ivec3 i){
     return imageLoad(cell_types, i).x;
 }
 bool isActive(uint type){
-    return (type == CELL_AIR || type == CELL_WATER);
+    return (type == cell_type_air || type == cell_type_water);
 }
 bool isWater(uint type){
-    return (type == CELL_WATER);
+    return (type == cell_type_water);
 }
 
 float getVelocityXAt(vec3 pos){

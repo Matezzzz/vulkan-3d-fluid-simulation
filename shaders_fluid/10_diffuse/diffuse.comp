@@ -2,22 +2,22 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui)    uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 1, rgba32f) uniform restrict readonly  image3D velocities_src;
-layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D velocities_dst;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 24) int cell_type_water;
+    layout(offset = 32) float time_delta;
+    layout(offset = 108) float gravity;
+    layout(offset = 112) float diffuse_a;
+};
+layout(set = 0, binding = 1, r8ui)    uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 2, rgba32f) uniform restrict readonly  image3D velocities_src;
+layout(set = 0, binding = 3, rgba32f) uniform restrict writeonly image3D velocities_dst;
 
 
-const int CELL_WATER = 2;
-const float time_delta = 0.01;
-const float diffuse_a = 0.1;
-
-
-//TODO - exclude solids out of computation(they shall have no friction)
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     vec3 velocity = imageLoad(velocities_src, i).xyz;
-    if (imageLoad(cell_types, i).x == CELL_WATER){
+    if (imageLoad(cell_types, i).x == cell_type_water){
         float diffuse_a_now = diffuse_a * time_delta;
         vec3 velocity = ( 1.0 - 6 * diffuse_a_now) * velocity + diffuse_a_now *
             (imageLoad(velocities_src, i + ivec3(1, 0, 0)).xyz + imageLoad(velocities_src, i + ivec3(-1, 0, 0)).xyz + 

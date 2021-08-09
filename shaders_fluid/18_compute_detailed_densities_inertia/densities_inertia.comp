@@ -1,41 +1,36 @@
 #version 450
 
 
-const int fluid_width = 20;
-const int fluid_height = 20;
-const int fluid_depth = 20;
-const int fluid_volume = fluid_width*fluid_height*fluid_depth;
-const int detailed_resolution = 4;
-const int detailed_resolution_volume = fluid_volume*detailed_resolution*detailed_resolution*detailed_resolution;
-
-
 
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-
-layout(set = 0, binding = 0) buffer restrict readonly particle_densities{
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;
+    layout(offset = 116) int detailed_resolution;
+    layout(offset = 124) int max_inertia;
+    layout(offset = 128) int inertia_increase_filled;
+    layout(offset = 132) int required_neighbour_hits;
+    layout(offset = 136) int inertia_increase_neighbour;
+    layout(offset = 140) int inertia_decrease;
+};
+layout(set = 0, binding = 1) buffer restrict readonly particle_densities{
     int particle_dens[512000];
 };
-layout(set = 0, binding = 1) buffer restrict densities_inertia{
+layout(set = 0, binding = 2) buffer restrict densities_inertia{
     int dens_inertia[512000];
 };
 
-int getIndex(ivec3 pos){
-    return pos.x + (pos.y + pos.z * fluid_height*detailed_resolution) * fluid_width*detailed_resolution;
+uint getIndex(ivec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_size.y * detailed_resolution) * fluid_size.x * detailed_resolution;
 }
 
 ivec3 moves[6] = ivec3[](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1), ivec3(-1, 0, 0), ivec3(0, -1, 0), ivec3(0, 0, -1));
 
-const int max_inertia = 100;
-const int inertia_increase_filled = 4;
-const int required_neighbour_hits = 2;
-const int inertia_increase_neighbour = 1;
-const int inertia_decrease = 1;
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    int i_ = getIndex(i);
+    uint i_ = getIndex(i);
 
     int inertia = dens_inertia[i_];
     int old_inertia = inertia;

@@ -1,0 +1,43 @@
+layout(offset = 0) uvec3 fluid_size
+layout(offset = 12) uint fluid_volume
+
+layout(offset = 16) int cell_type_inactive
+layout(offset = 20) int cell_type_air
+layout(offset = 24) int cell_type_water
+layout(offset = 28) int cell_type_solid
+
+layout(offset = 32) float time_delta
+layout(offset = 36) float pressure_air
+layout(offset = 40) float cell_width
+layout(offset = 44) float fluid_density;
+
+layout(offset = 48) uvec2 particle_compute_size
+layout(offset = 64) uvec3 particle_spawn_cube_resolution
+layout(offset = 80) vec3 particle_spawn_cube_offset
+layout(offset = 96) vec3 particle_spawn_cube_size
+
+layout(offset = 108) float gravity
+
+layout(offset = 112) float diffuse_k
+
+layout(offset = 116) int detailed_resolution 
+layout(offset = 120) int detailed_resolution_volume
+
+layout(offset = 124) int max_inertia
+layout(offset = 128) int inertia_increase_filled
+layout(offset = 132) int required_neighbour_hits
+layout(offset = 136) int inertia_increase_neighbour
+layout(offset = 140) int inertia_decrease
+
+layout(offset = 144) float dens_division_coefficient
+
+layout(offset = 148) float dens_diffuse_k
+
+layout(offset = 160) vec3 particle_color
+layout(offset = 172) float particle_base_size
+
+layout(offset = 176) vec3 light_dir
+layout(offset = 192) vec3 ambient_color
+layout(offset = 208) vec3 diffuse_color
+
+layout(offset = 224) uvec3 fluid_render_size

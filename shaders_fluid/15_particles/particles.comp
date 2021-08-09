@@ -2,14 +2,16 @@
 
 layout(local_size_x = 256) in;
 
-layout(set = 0, binding = 0) uniform sampler3D velocities;
-layout(set = 0, binding = 1) buffer restrict particles{
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 32) float time_delta;
+};
+layout(set = 0, binding = 1) uniform sampler3D velocities;
+layout(set = 0, binding = 2) buffer restrict particles{
     vec4 particle_positions[65536];
 };
 
 
 
-const float time_delta = 0.01;
 
 float getVelocityXAt(vec3 pos){
     return texture(velocities, pos + vec3(0.5, 0, 0)).x;

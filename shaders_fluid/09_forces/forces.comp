@@ -2,13 +2,15 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui)     uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 1, rgba32f) uniform restrict image3D velocities;
 
-const uint CELL_AIR = 1;
-const uint CELL_WATER = 2;
-const float time_delta = 0.01;
-const float gravity = 10;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 24) int cell_type_water;
+    layout(offset = 32) float time_delta;
+    layout(offset = 108) float gravity;
+};
+layout(set = 0, binding = 1, r8ui)     uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
+
 
 
 uint cellAt(ivec3 i){
@@ -16,9 +18,8 @@ uint cellAt(ivec3 i){
 }
 
 bool isActive(uint type){
-    return (type == CELL_WATER);
+    return (type == cell_type_water);
 }
-
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);

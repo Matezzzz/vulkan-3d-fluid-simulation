@@ -3,27 +3,26 @@
 layout(local_size_x = 256) in;
 
 
-
-layout(set = 0, binding = 0) buffer restrict readonly particles{
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;
+};
+layout(set = 0, binding = 1) buffer restrict readonly particles{
     vec4 particle_positions[65536];
 };
-layout(set = 0, binding = 1) buffer restrict coherent particle_densities{
+layout(set = 0, binding = 2) buffer restrict coherent particle_densities{
     int particle_dens[8000];
 };
 
-const int fluid_width = 20;
-const int fluid_height = 20;
-const int fluid_depth = 20;
 
 
-int getIndex(ivec3 pos){
-    return pos.x + (pos.y + pos.z * fluid_height) * fluid_width;
+uint getIndex(uvec3 pos){
+    return pos.x + (pos.y + pos.z * fluid_size.y) * fluid_size.x;
 }
 
 void main(){
-    int i = int(gl_GlobalInvocationID.x);
+    uint i = gl_GlobalInvocationID.x;
     vec4 pos = particle_positions[i];
     if (pos.w == 1.0){
-        atomicAdd(particle_dens[getIndex(ivec3(pos.xyz))], 1);
+        atomicAdd(particle_dens[getIndex(uvec3(pos.xyz))], 1);
     }
 }

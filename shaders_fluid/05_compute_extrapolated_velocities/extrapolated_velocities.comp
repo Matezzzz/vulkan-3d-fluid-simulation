@@ -2,17 +2,19 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui) uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 1, rgba32f) uniform restrict readonly image3D velocities;
-layout(set = 0, binding = 2, rgba32f) uniform restrict writeonly image3D extrapolated_velocities;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 24) int cell_type_water;
+};
+layout(set = 0, binding = 1, r8ui) uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 2, rgba32f) uniform restrict readonly image3D velocities;
+layout(set = 0, binding = 3, rgba32f) uniform restrict writeonly image3D extrapolated_velocities;
 
-const uint CELL_WATER = 2;
 
 uint cellAt(ivec3 pos){
     return imageLoad(cell_types, pos).x;
 }
 bool isWater(uint a){
-    return (a == CELL_WATER);
+    return (a == cell_type_water);
 }
 
 vec3 getExtrapolatedVelocity(ivec3 i){

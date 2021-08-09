@@ -2,21 +2,22 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui) uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 1, r32f) uniform restrict readonly image3D divergences;
-layout(set = 0, binding = 2, r32f) uniform restrict image3D pressures_1;
-layout(set = 0, binding = 3, r32f) uniform restrict image3D pressures_2;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 24) int cell_type_water;
+    layout(offset = 28) int cell_type_solid;
+    layout(offset = 32) float time_delta;
+    layout(offset = 36) float pressure_air;
+    layout(offset = 40) float cell_width;
+    layout(offset = 44) float fluid_density;
+};
+layout(set = 0, binding = 1, r8ui) uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 2, r32f) uniform restrict readonly image3D divergences;
+layout(set = 0, binding = 3, r32f) uniform restrict image3D pressures_1;
+layout(set = 0, binding = 4, r32f) uniform restrict image3D pressures_2;
 
 
 
-const uint CELL_AIR = 1;
-const uint CELL_WATER = 2;
-const uint CELL_SOLID = 3;
 
-const float pressure_air = 1;
-const float fluid_density = 1;
-const float time_delta = 0.01;
-const float cell_width = 1;
 
 layout(push_constant) uniform constants{
     uint is_even_iteration;
@@ -26,8 +27,8 @@ layout(push_constant) uniform constants{
 
 #define search_neighbor(tex_in, move)\
 t = imageLoad(cell_types, i + move).x;\
-if (t != CELL_SOLID){\
-    if (t == CELL_WATER){\
+if (t != cell_type_solid){\
+    if (t == cell_type_water){\
         s -= imageLoad(tex_in, i + move).x;\
     }else{\
         s -= pressure_air;\
@@ -51,7 +52,7 @@ imageStore(tex_out, i, vec4(-s / aii, 0, 0, 0));
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     uint t = imageLoad(cell_types, i).x;
-    if (t == CELL_WATER){
+    if (t == cell_type_water){
         if (is_even_iteration == 1){
             computePressure(pressures_1, pressures_2)
         }else{

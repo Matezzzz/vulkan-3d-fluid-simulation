@@ -2,17 +2,20 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r8ui)    uniform restrict readonly uimage3D cell_types;
-layout(set = 0, binding = 1, r32f)    uniform restrict readonly image3D pressures;
-layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
 
 
-const int CELL_WATER = 2;
-const int CELL_SOLID = 3;
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 24) int cell_type_water;
+    layout(offset = 28) int cell_type_solid;
+    layout(offset = 32) float time_delta;
+    layout(offset = 40) float cell_width;
+    layout(offset = 44) float fluid_density;
+};
+layout(set = 0, binding = 1, r8ui)    uniform restrict readonly uimage3D cell_types;
+layout(set = 0, binding = 2, r32f)    uniform restrict readonly image3D pressures;
+layout(set = 0, binding = 3, rgba32f) uniform restrict image3D velocities;
 
-const float fluid_density = 1;
-const float time_delta = 0.01;
-const float cell_width = 1;
+
 
 
 uint cellAt(ivec3 i){
@@ -22,10 +25,10 @@ float pressureAt(ivec3 i){
     return imageLoad(pressures, i).x;
 }
 bool isWater(uint a){
-    return (a == CELL_WATER);
+    return (a == cell_type_water);
 }
 bool isSolid(uint a){
-    return (a == CELL_SOLID);
+    return (a == cell_type_solid);
 }
 
 

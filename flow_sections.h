@@ -14,15 +14,15 @@ using std::make_unique;
 
 
 
-struct Size3{
-    uint32_t x, y, z;
+struct Size3 : public glm::uvec3{
+    using glm::uvec3::uvec3;
     Size3 operator/(const Size3& s) const{
         return Size3{x / s.x, y / s.y, z / s.z};
     }
-    uint32_t volume(){
+    uint32_t volume() const{
         return x * y * z;
     }
-    Size3 operator*(uint32_t k){
+    Size3 operator*(uint32_t k) const{
         return Size3{k * x, k * y, k * z};
     }
 };

@@ -14,6 +14,7 @@
 using std::vector;
 using std::string;
 
+
 uint32_t screen_width = 1400;
 uint32_t screen_height = 1400;
 string app_name = "Vulkan fluid simulation";
@@ -27,11 +28,15 @@ Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 
 
 
-Size3 particle_space_size{256*256, 1, 1};
-Size3 particle_local_group_size{256, 1, 1};
-Size3 particle_dispatch_size = particle_space_size / particle_local_group_size;
+uint32_t particle_space_size = 256 * 256;
+uint32_t particle_local_group_size = 256;
+Size3 particle_dispatch_size = Size3{particle_space_size / particle_local_group_size, 1, 1};
 
-const int detailed_densities_resolution = 4;
+glm::uvec3 particle_init_cube_resolution{256, 256, 1};
+glm::vec3 particle_init_cube_offset{5, 2, 1.5};
+glm::vec3 particle_init_cube_size{10, 10, 1};
+
+constexpr int detailed_densities_resolution = 4;
 Size3 detailed_densities_size = fluid_size * detailed_densities_resolution;
 Size3 detailed_densities_local_group_size{10, 10, 1};
 Size3 detailed_densities_dispatch_size = detailed_densities_size / detailed_densities_local_group_size;
@@ -43,6 +48,33 @@ constexpr uint32_t divergence_solve_iterations = 100;
 
 constexpr uint32_t float_density_diffuse_steps = 4;
 
+constexpr float simulation_time_step = 0.01;
+constexpr float simulation_air_pressure = 1;
+constexpr float simulation_cell_width = 1;
+constexpr float simulation_fluid_density = 1;
+constexpr float simulation_gravity = 10.0;
+constexpr float simulation_diffusion_coefficient = 0.01;
+
+constexpr int simulation_densities_max_inertia = 100;
+constexpr int simulation_inertia_increase_filled = 4;
+constexpr int simulation_inertia_required_neighbour_hits = 2;
+constexpr int simulation_inertia_increase_neighbour = 1;
+constexpr int simulation_inertia_decrease = 1;
+
+constexpr float simulation_float_density_division_coefficient = 30;
+constexpr float simulation_float_density_diffuse_coefficient = 0.1;
+
+glm::vec3 particle_render_color{1, 0, 0};
+constexpr float particle_render_size = 20;
+const glm::vec3 render_light_direction{1, -3, 1};
+const glm::vec3 render_surface_ambient_color{0, 0, 0.3};
+const glm::vec3 render_surface_diffuse_color{0, 0.8, 1.0};
+
+const Size3 fluid_render_size{detailed_densities_size.x - 1, detailed_densities_size.y - 1, detailed_densities_size.z - 1};
+
+enum CellTypes{
+    CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
+};
 
 
 int main()
@@ -93,7 +125,7 @@ int main()
     ExtImage cell_types_img = cell_type_image_info.create();
     ExtImage cell_types_new_img = cell_type_image_info.create();
 
-    Buffer particles_buffer = BufferInfo(particle_space_size.volume() * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
+    Buffer particles_buffer = BufferInfo(particle_space_size * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
     Buffer densities_buffer = BufferInfo(fluid_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
     
     BufferInfo detailed_densities_info(detailed_densities_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -102,7 +134,21 @@ int main()
 
 
     UniformBufferRawDataSTD140 fluid_params_uniform_buffer;
-    fluid_params_uniform_buffer.writeIVec3((int32_t*) &fluid_size);
+    fluid_params_uniform_buffer
+        .writeIVec3((int32_t*) &fluid_size).write(fluid_size.volume())
+        .write((uint32_t) CELL_INACTIVE).write((uint32_t) CELL_AIR).write((uint32_t) CELL_WATER).write((uint32_t) CELL_SOLID)
+        .write(simulation_time_step).write(simulation_air_pressure).write(simulation_cell_width).write(simulation_fluid_density)
+        .write(glm::uvec2(256, 256)).write(particle_init_cube_resolution).write(particle_init_cube_offset).write(particle_init_cube_size)
+        .write(simulation_gravity)
+        .write(simulation_diffusion_coefficient)
+        .write(detailed_densities_resolution).write(detailed_densities_size.volume())
+        .write(simulation_densities_max_inertia).write(simulation_inertia_increase_filled).write(simulation_inertia_required_neighbour_hits).write(simulation_inertia_increase_neighbour).write(simulation_inertia_decrease)
+        .write(simulation_float_density_division_coefficient)
+        .write(particle_render_color).write(particle_render_size)
+        .write(render_light_direction).write(render_surface_ambient_color).write(render_surface_diffuse_color)
+        .write(fluid_render_size);
+
+    Buffer simulation_parameters_buffer = BufferInfo(fluid_params_uniform_buffer, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT).create();
 
 
     ImageInfo pressures_image_info = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
@@ -116,9 +162,10 @@ int main()
     ExtImage depth_test_image = ImageInfo(screen_width, screen_height, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT).create();
 
     ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer, simulation_parameters_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     marching_cubes.loadData(device_local_buffer_creator);
+    device_local_buffer_creator.copyToLocal(fluid_params_uniform_buffer, simulation_parameters_buffer);
 
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
@@ -126,7 +173,7 @@ int main()
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
     };
     enum BufferAttachments{
-        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, DETAILED_DENSITIES_BUF, DENSITIES_INERTIA_BUF, BUFFER_COUNT
+        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, DETAILED_DENSITIES_BUF, DENSITIES_INERTIA_BUF, SIMULATION_PARAMS_BUF, BUFFER_COUNT
     };
 
     DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -134,18 +181,16 @@ int main()
     FlowBufferContext flow_context{
         {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img},
         vector<PipelineImageState>(IMAGE_COUNT, PipelineImageState{ImageState{IMAGE_NEWLY_CREATED}}),
-        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer},
+        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer, simulation_parameters_buffer},
         vector<PipelineBufferState>(BUFFER_COUNT, PipelineBufferState{BufferState{BUFFER_NEWLY_CREATED}})
     };    
 
-    enum CellTypes{
-        CELL_INACTIVE, CELL_AIR, CELL_WATER, CELL_SOLID
-    };
-
+    
     
 
     DirectoryPipelinesContext fluid_context("shaders_fluid");
 
+    FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_buffer", SIMULATION_PARAMS_BUF, usage_compute, BufferState{BUFFER_UNIFORM}};
 
     SectionList init_sections{
         new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
@@ -159,10 +204,11 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}}
+                    simulation_parameters_buffer_compute_usage,
+                    FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}},
                 }
             },
-            Size3{1, 256, 1}
+            Size3{1,particle_space_size / particle_local_group_size, 1}
         )
     };
 
@@ -175,6 +221,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}}
                 }
             },
@@ -185,6 +232,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
                 }
@@ -196,6 +244,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 }
@@ -207,6 +256,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
             },
@@ -217,6 +267,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types", CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"extrapolated_velocities", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -229,6 +280,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"new_cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"cell_types", CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
@@ -253,6 +305,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types",      CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowCombinedImage{"velocities_src", VELOCITIES_1, usage_compute, ImageState{IMAGE_SAMPLER}, velocities_sampler},
                     FlowStorageImage{"velocities_dst",  VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -265,6 +318,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
@@ -276,6 +330,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types",     CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities_src", VELOCITIES_2, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities_dst", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_W}}
@@ -288,6 +343,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}}
                 }
@@ -316,6 +372,7 @@ int main()
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
+                simulation_parameters_buffer_compute_usage,
                 FlowStorageImage{"cell_types", CELL_TYPES,  usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowStorageImage{"divergences", DIVERGENCES, usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowStorageImage{"pressures_1", PRESSURES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}},
@@ -333,6 +390,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"pressures", PRESSURES_2,  usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_RW}}
@@ -345,6 +403,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowCombinedImage{"velocities", VELOCITIES_1,   usage_compute, ImageState{IMAGE_SAMPLER}, velocities_sampler},
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}},
                 }
@@ -356,6 +415,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}},
                 }
             }, 
@@ -366,6 +426,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
                 }
@@ -377,6 +438,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
                 }
@@ -388,6 +450,7 @@ int main()
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
+                    simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
                     FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 }
@@ -401,6 +464,7 @@ int main()
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
+                simulation_parameters_buffer_compute_usage,
                 FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowStorageImage{"densities_1", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                 FlowStorageImage{"densities_2", PARTICLE_DENSITIES_FLOAT_2, usage_compute, ImageState{IMAGE_STORAGE_W}},
@@ -426,24 +490,26 @@ int main()
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
+                FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT), BufferState{BUFFER_UNIFORM}),
                 FlowStorageBuffer{"particles", PARTICLES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_R}}
             }
         },
-        particle_space_size.volume(), render_pipeline_info, render_pass
+        particle_space_size, render_pipeline_info, render_pass
     );
     auto render_surface_section = new FlowGraphicsPushConstantSection(
         fluid_context, "31_render_surface",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
+                FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT), BufferState{BUFFER_UNIFORM}),
                 FlowUniformBuffer{"triangle_counts", MARCHING_CUBES_COUNTS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
                 FlowUniformBuffer{"triangle_vertices", MARCHING_CUBES_EDGES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT), BufferState{BUFFER_UNIFORM}},
                 FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT_2, DescriptorUsageStage{VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT}, ImageState{IMAGE_STORAGE_R}}
             }
         },
-        79*79*79, render_pipeline_info, render_pass
+        fluid_render_size.volume(), render_pipeline_info, render_pass
     );
-    auto display_data_section = new FlowGraphicsPushConstantSection(
+    /*auto display_data_section = new FlowGraphicsPushConstantSection(
         fluid_context, "32_display_data",
         FlowPipelineSectionDescriptors{
             flow_context,
@@ -456,7 +522,8 @@ int main()
     
 
     SectionList render_section_list(render_section, display_data_section, render_surface_section);
-
+    */
+    SectionList render_section_list(render_section, render_surface_section);
 
     fluid_context.createDescriptorPool();
 
@@ -547,15 +614,15 @@ int main()
             swapchain_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_COLOR_ATTACHMENT})
         );
         render_section->transitionAllImages(render_command_buffer, flow_context);
-        display_data_section->transitionAllImages(render_command_buffer, flow_context);
+        //display_data_section->transitionAllImages(render_command_buffer, flow_context);
         render_surface_section->transitionAllImages(render_command_buffer, flow_context);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
 
         MVP = projection * camera.view_matrix;
         render_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
         render_section->execute(render_command_buffer);
-        display_data_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
-        display_data_section->execute(render_command_buffer);
+        /*display_data_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+        display_data_section->execute(render_command_buffer);*/
         render_surface_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
         render_surface_section->execute(render_command_buffer);
         render_command_buffer.cmdEndRenderPass();
