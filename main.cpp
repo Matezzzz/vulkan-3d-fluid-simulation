@@ -21,22 +21,22 @@ string app_name = "Vulkan fluid simulation";
 
 
 
-uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 20;
+uint32_t fluid_width = 40, fluid_height = 40, fluid_depth = 40;
 Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 Size3 fluid_local_group_size{10, 10, 1};
 Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 
 
 
-uint32_t particle_space_size = 256 * 256;
-uint32_t particle_local_group_size = 256;
+uint32_t particle_space_size = 1000000;
+uint32_t particle_local_group_size = 1000;
 Size3 particle_dispatch_size = Size3{particle_space_size / particle_local_group_size, 1, 1};
 
-glm::uvec3 particle_init_cube_resolution{256, 256, 1};
+glm::uvec3 particle_init_cube_resolution{100, 100, 100};
 glm::vec3 particle_init_cube_offset{5, 2, 1.5};
-glm::vec3 particle_init_cube_size{10, 10, 1};
+glm::vec3 particle_init_cube_size{10, 10, 10};
 
-constexpr int detailed_densities_resolution = 4;
+constexpr int detailed_densities_resolution = 5;
 Size3 detailed_densities_size = fluid_size * detailed_densities_resolution;
 Size3 detailed_densities_local_group_size{10, 10, 1};
 Size3 detailed_densities_dispatch_size = detailed_densities_size / detailed_densities_local_group_size;
@@ -44,7 +44,7 @@ Size3 detailed_densities_dispatch_size = detailed_densities_size / detailed_dens
 
 const float pressure_air = 1.0;
 
-constexpr uint32_t divergence_solve_iterations = 100;
+constexpr uint32_t divergence_solve_iterations = 200;
 
 constexpr uint32_t float_density_diffuse_steps = 4;
 
@@ -634,7 +634,7 @@ int main()
         // * Submit command buffer and wait for it to finish*
         swapchain.prepareToDraw();
         queue.submit(render_command_buffer, render_synchronization);
-        render_synchronization.waitFor(SYNC_FRAME);
+        render_synchronization.waitFor(SYNC_SECOND);
         
         // * Present rendered image and reset buffer for next frame *
         swapchain.presentImage(swapchain_image, present_queue);

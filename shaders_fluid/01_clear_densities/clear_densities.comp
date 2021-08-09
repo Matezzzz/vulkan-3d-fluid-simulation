@@ -3,7 +3,7 @@
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 
-const int FLUID_VOLUME = 8000;
+const int FLUID_VOLUME = 64000;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 0) ivec3 fluid_size;

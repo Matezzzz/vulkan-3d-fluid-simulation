@@ -1,6 +1,6 @@
 #version 450
 
-const int PARTICLE_BUFFER_SIZE = 65536;
+const int PARTICLE_BUFFER_SIZE = 1000000;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
@@ -16,7 +16,6 @@ layout(push_constant) uniform constants{
 
 layout(location = 0) out float should_discard;
 
-const uint particle_batch_size = 256;
 
 void main(){
     vec4 pos = particle_positions[gl_VertexIndex];
