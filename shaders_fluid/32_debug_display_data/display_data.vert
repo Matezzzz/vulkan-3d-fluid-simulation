@@ -1,8 +1,14 @@
 #version 450
 
 
-layout(set = 0, binding = 0) buffer restrict readonly particle_densities{
-    int densities[8000];
+const int FLUID_VOLUME = 8000;
+
+
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;
+};
+layout(set = 0, binding = 1) buffer restrict readonly particle_densities{
+    int densities[FLUID_VOLUME];
 };
 
 layout(push_constant) uniform constants{
@@ -11,11 +17,10 @@ layout(push_constant) uniform constants{
 
 layout(location = 0) out vec3 color;
 
-const int fluid_width = 20;
-const int fluid_height = 20;
+
 
 ivec3 getPos(int vertex_i){
-    return ivec3(vertex_i % fluid_width, vertex_i % (fluid_width * fluid_height) / fluid_width, vertex_i / fluid_width / fluid_height);
+    return ivec3(vertex_i % fluid_size.x, vertex_i % (fluid_size.x * fluid_size.y) / fluid_size.x, vertex_i / fluid_size.x / fluid_size.y);
 }
 
 void main(){

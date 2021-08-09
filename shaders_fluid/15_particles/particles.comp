@@ -2,12 +2,16 @@
 
 layout(local_size_x = 256) in;
 
+
+const int PARTICLE_BUFFER_SIZE = 65536;
+
+
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 32) float time_delta;
 };
 layout(set = 0, binding = 1) uniform sampler3D velocities;
 layout(set = 0, binding = 2) buffer restrict particles{
-    vec4 particle_positions[65536];
+    vec4 particle_positions[PARTICLE_BUFFER_SIZE];
 };
 
 

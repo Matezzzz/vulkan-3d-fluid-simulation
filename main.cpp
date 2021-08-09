@@ -144,6 +144,7 @@ int main()
         .write(detailed_densities_resolution).write(detailed_densities_size.volume())
         .write(simulation_densities_max_inertia).write(simulation_inertia_increase_filled).write(simulation_inertia_required_neighbour_hits).write(simulation_inertia_increase_neighbour).write(simulation_inertia_decrease)
         .write(simulation_float_density_division_coefficient)
+        .write(simulation_float_density_diffuse_coefficient)
         .write(particle_render_color).write(particle_render_size)
         .write(render_light_direction).write(render_surface_ambient_color).write(render_surface_diffuse_color)
         .write(fluid_render_size);
@@ -514,6 +515,7 @@ int main()
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
+                FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_UNIFORM}),
                 FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_R}}
             }
         },

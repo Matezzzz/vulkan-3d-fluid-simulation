@@ -1,10 +1,13 @@
 #version 450
 
+const int PARTICLE_BUFFER_SIZE = 65536;
+
+
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 172) float particle_base_size;
 };
 layout(set = 0, binding = 1) buffer restrict readonly particles{
-    vec4 particle_positions[65536];
+    vec4 particle_positions[PARTICLE_BUFFER_SIZE];
 };
 
 layout(push_constant) uniform constants{

@@ -1,5 +1,11 @@
 #version 450
 
+
+const int PARTICLE_BUFFER_SIZE = 65536;
+const int DETAILED_FLUID_VOLUME = 512000;
+
+
+
 layout(local_size_x = 256) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
@@ -7,10 +13,10 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 116) int detailed_resolution;
 };
 layout(set = 0, binding = 1) buffer restrict readonly particles{
-    vec4 particle_positions[65536];
+    vec4 particle_positions[PARTICLE_BUFFER_SIZE];
 };
 layout(set = 0, binding = 2) buffer restrict coherent particle_densities{
-    int particle_dens[512000];
+    int particle_dens[DETAILED_FLUID_VOLUME];
 };
 
 

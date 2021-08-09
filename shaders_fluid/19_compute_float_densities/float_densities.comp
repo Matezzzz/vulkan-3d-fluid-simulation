@@ -2,6 +2,7 @@
 
 layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
+const int DETAILED_FLUID_VOLUME = 512000;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
@@ -10,7 +11,7 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 144) float dens_division_coefficient;
 };
 layout(set = 0, binding = 1) buffer restrict readonly densities_inertia{
-    int dens_inertia[512000];
+    int dens_inertia[DETAILED_FLUID_VOLUME];
 };
 layout(set = 0, binding = 2, r32f) uniform restrict writeonly image3D float_densities;
 
