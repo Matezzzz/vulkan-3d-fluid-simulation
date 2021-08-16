@@ -1,7 +1,7 @@
 #version 450
 
 
-const int FLUID_VOLUME = 64000;
+const int FLUID_VOLUME = 8000;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{

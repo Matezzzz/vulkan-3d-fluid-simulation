@@ -40,4 +40,4 @@ layout(offset = 176) vec3 light_dir
 layout(offset = 192) vec3 ambient_color
 layout(offset = 208) vec3 diffuse_color
 
-layout(offset = 224) uvec3 fluid_render_size
+layout(offset = 224) uvec3 fluid_surface_render_size

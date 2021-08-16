@@ -3,7 +3,7 @@
 layout(local_size_x = 1000) in;
 
 
-const int FLUID_VOLUME = 64000;
+const int FLUID_VOLUME = 8000;
 const int PARTICLE_BUFFER_SIZE = 1000000;
 
 

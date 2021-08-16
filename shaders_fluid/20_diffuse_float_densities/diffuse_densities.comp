@@ -1,6 +1,6 @@
 #version 450
 
-layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 28) int cell_type_solid;

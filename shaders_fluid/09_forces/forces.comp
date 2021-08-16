@@ -1,6 +1,6 @@
 #version 450
 
-layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
+layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
@@ -35,7 +35,7 @@ void main(){
         }
     }
     if (i.x == fluid_size.x / 2 && i.y == fluid_size.y - 2 && i.z == fluid_size.z / 2 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.y -= 20000;
+        force.y -= 3000;
     }
     /*if (i.x == 15 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
         force.y -= 4000;
