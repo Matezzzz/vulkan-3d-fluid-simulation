@@ -204,6 +204,13 @@ int main(){
     ExtImage pressures_1_img = pressures_image_info.create();
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
+
+
+    ImageInfo detailed_densities_info(surface_render_size.x, surface_render_size.y, surface_render_size.z, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+    ExtImage densities_image = detailed_densities_info.create();
+    ExtImage detailed_densities_image = detailed_densities_info.create();
+    ExtImage detailed_densities_inertia_image = detailed_densities_info.create();
+
     ExtImage float_densities_1_img = ImageInfo(fluid_width*surface_render_resolution, fluid_height*surface_render_resolution, fluid_depth*surface_render_resolution, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
     ExtImage float_densities_2_img = ImageInfo(fluid_width*surface_render_resolution, fluid_height*surface_render_resolution, fluid_depth*surface_render_resolution, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT).create();
 
@@ -211,7 +218,7 @@ int main(){
     ExtImage depth_test_image = ImageInfo(screen_width, screen_height, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT).create();
     
     //Allocate memory for all created images on the GPU
-    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    ImageMemoryObject memory({velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, densities_image, detailed_densities_image, detailed_densities_inertia_image,  float_densities_1_img, float_densities_2_img, depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     
     /**
@@ -223,11 +230,7 @@ int main(){
 
     //buffer for all particles (3 values position, 1 for determining whether particle is active or not)
     Buffer particles_buffer = BufferInfo(particle_space_size * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
-    Buffer densities_buffer = BufferInfo(fluid_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
     
-    BufferInfo detailed_densities_info(surface_render_size.volume() * sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    Buffer detailed_densities_buffer = detailed_densities_info.create();
-    Buffer detailed_densities_inertia_buffer = detailed_densities_info.create();
 
     
     MarchingCubesBuffers marching_cubes;
@@ -254,7 +257,7 @@ int main(){
 
     
 
-    BufferMemoryObject buffer_memory({particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer, simulation_parameters_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BufferMemoryObject buffer_memory({particles_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, simulation_parameters_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     marching_cubes.loadData(device_local_buffer_creator);
     device_local_buffer_creator.copyToLocal(fluid_params_uniform_buffer, simulation_parameters_buffer);
@@ -262,18 +265,18 @@ int main(){
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
     enum Attachments{
-        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
+        VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_IMG, DETAILED_DENSITIES_IMG, DETAILED_DENSITIES_INERTIA_IMG, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
     };
     enum BufferAttachments{
-        PARTICLES_BUF, PARTICLE_DENSITIES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, DETAILED_DENSITIES_BUF, DENSITIES_INERTIA_BUF, SIMULATION_PARAMS_BUF, BUFFER_COUNT
+        PARTICLES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, SIMULATION_PARAMS_BUF, BUFFER_COUNT
     };
 
     DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     FlowBufferContext flow_context{
-        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, float_densities_1_img, float_densities_2_img},
+        {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, densities_image, detailed_densities_image, detailed_densities_inertia_image,  float_densities_1_img, float_densities_2_img, depth_test_image},
         vector<PipelineImageState>(IMAGE_COUNT, PipelineImageState{ImageState{IMAGE_NEWLY_CREATED}}),
-        {particles_buffer, densities_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, detailed_densities_buffer, detailed_densities_inertia_buffer, simulation_parameters_buffer},
+        {particles_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, simulation_parameters_buffer},
         vector<PipelineBufferState>(BUFFER_COUNT, PipelineBufferState{BufferState{BUFFER_NEWLY_CREATED}})
     };    
 
@@ -308,17 +311,7 @@ int main(){
 
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
-        new FlowComputeSection(
-            fluid_context, "01_clear_densities",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    simulation_parameters_buffer_compute_usage,
-                    FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}}
-                }
-            },
-            fluid_dispatch_size
-        ),
+        new FlowClearColorSection(flow_context, PARTICLE_DENSITIES_IMG, ClearValue((uint32_t) 0)),
         new FlowComputeSection(
             fluid_context, "02_update_densities",
             FlowPipelineSectionDescriptors{
@@ -326,7 +319,7 @@ int main(){
                 vector<FlowPipelineSectionDescriptorUsage>{
                     simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
-                    FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
+                    FlowStorageImage{"particle_densities", PARTICLE_DENSITIES_IMG, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
             },
             particle_dispatch_size
@@ -337,7 +330,7 @@ int main(){
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
                     simulation_parameters_buffer_compute_usage,
-                    FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
+                    FlowStorageImage{"particle_densities", PARTICLE_DENSITIES_IMG, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"cell_types", NEW_CELL_TYPES, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 }
             },
@@ -502,17 +495,7 @@ int main(){
             },
             particle_dispatch_size
         ),
-        new FlowComputeSection(
-            fluid_context, "16_clear_detailed_densities",
-            FlowPipelineSectionDescriptors{
-                flow_context,
-                vector<FlowPipelineSectionDescriptorUsage>{
-                    simulation_parameters_buffer_compute_usage,
-                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}},
-                }
-            }, 
-            surface_render_dispatch_size
-        ),
+        new FlowClearColorSection(flow_context, DETAILED_DENSITIES_IMG, ClearValue(0u)),
         new FlowComputeSection(
             fluid_context, "17_update_detailed_densities",
             FlowPipelineSectionDescriptors{
@@ -520,7 +503,7 @@ int main(){
                 vector<FlowPipelineSectionDescriptorUsage>{
                     simulation_parameters_buffer_compute_usage,
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
-                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
+                    FlowStorageImage{"particle_densities", DETAILED_DENSITIES_IMG, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
             }, 
             particle_dispatch_size
@@ -531,8 +514,8 @@ int main(){
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
                     simulation_parameters_buffer_compute_usage,
-                    FlowStorageBuffer{"particle_densities", DETAILED_DENSITIES_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
-                    FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_RW}}
+                    FlowStorageImage{"particle_densities", DETAILED_DENSITIES_IMG, usage_compute, ImageState{IMAGE_STORAGE_R}},
+                    FlowStorageImage{"densities_inertia", DETAILED_DENSITIES_INERTIA_IMG, usage_compute, ImageState{IMAGE_STORAGE_RW}}
                 }
             }, 
             surface_render_dispatch_size
@@ -543,7 +526,7 @@ int main(){
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
                     simulation_parameters_buffer_compute_usage,
-                    FlowStorageBuffer{"densities_inertia", DENSITIES_INERTIA_BUF, usage_compute, BufferState{BUFFER_STORAGE_R}},
+                    FlowStorageImage{"densities_inertia", DETAILED_DENSITIES_INERTIA_IMG, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"float_densities", PARTICLE_DENSITIES_FLOAT_1, usage_compute, ImageState{IMAGE_STORAGE_W}},
                 }
             }, 

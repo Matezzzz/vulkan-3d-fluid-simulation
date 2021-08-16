@@ -1,53 +1,53 @@
 #version 450
 
 
-const int DETAILED_FLUID_VOLUME = 8000000;
 
 
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 0) uvec3 fluid_size;
-    layout(offset = 116) int detailed_resolution;
     layout(offset = 124) int max_inertia;
     layout(offset = 128) int inertia_increase_filled;
     layout(offset = 132) int required_neighbour_hits;
     layout(offset = 136) int inertia_increase_neighbour;
     layout(offset = 140) int inertia_decrease;
 };
-layout(set = 0, binding = 1) buffer restrict readonly particle_densities{
-    int particle_dens[DETAILED_FLUID_VOLUME];
-};
-layout(set = 0, binding = 2) buffer restrict densities_inertia{
-    int dens_inertia[DETAILED_FLUID_VOLUME];
-};
+layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D particle_densities;
+layout(set = 0, binding = 2, r32ui) uniform restrict uimage3D densities_inertia;
 
-uint getIndex(ivec3 pos){
-    return pos.x + (pos.y + pos.z * fluid_size.y * detailed_resolution) * fluid_size.x * detailed_resolution;
-}
 
 ivec3 moves[6] = ivec3[](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1), ivec3(-1, 0, 0), ivec3(0, -1, 0), ivec3(0, 0, -1));
 
 
+uint densityAt(ivec3 pos){
+    return imageLoad(particle_densities, pos).x;
+}
+
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    uint i_ = getIndex(i);
 
-    int inertia = dens_inertia[i_];
-    int old_inertia = inertia;
+    uint inertia = imageLoad(densities_inertia, i).x;
+    uint old_inertia = inertia;
 
     if (inertia < max_inertia){
-        if (particle_dens[i_] > 0){
+        if (densityAt(i) > 0){
             inertia += inertia_increase_filled;
         }
         int hit_count = 0;
         for (int j = 0; j < 6; j++){
-            if (particle_dens[getIndex(i + moves[j])] > 0){
+            if (densityAt(i + moves[j]) > 0){
                 hit_count += inertia_increase_neighbour;
             }
         }
         if (hit_count >= required_neighbour_hits) inertia += hit_count * 2;
     }
-    if (inertia == old_inertia && inertia >= 0) inertia -= inertia_decrease;
-    dens_inertia[i_] = inertia;
+    if (inertia == old_inertia){
+        if (inertia > inertia_decrease){
+            inertia -= inertia_decrease;
+        }else{
+            inertia = 0;
+        }
+    }
+    imageStore(densities_inertia, i, ivec4(inertia, 0, 0, 0));
 }

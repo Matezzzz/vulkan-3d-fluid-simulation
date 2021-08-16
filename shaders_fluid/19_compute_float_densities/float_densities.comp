@@ -2,29 +2,20 @@
 
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
-const int DETAILED_FLUID_VOLUME = 8000000;
-
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 0) uvec3 fluid_size;
-    layout(offset = 116) int detailed_resolution;
     layout(offset = 144) float dens_division_coefficient;
 };
-layout(set = 0, binding = 1) buffer restrict readonly densities_inertia{
-    int dens_inertia[DETAILED_FLUID_VOLUME];
-};
+layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D densities_inertia;
 layout(set = 0, binding = 2, r32f) uniform restrict writeonly image3D float_densities;
 
 
 const float dens_division_coeff = 20.0;
 
-uint getIndex(ivec3 pos){
-    return pos.x + (pos.y + pos.z * fluid_size.y * detailed_resolution) * fluid_size.x * detailed_resolution;
-}
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    int dens = dens_inertia[getIndex(i)];
+    uint dens = imageLoad(densities_inertia, i).x;
     float d = (dens == 0) ? -1 : dens / dens_division_coeff;
     imageStore(float_densities, i, vec4(d, 0, 0, 0));
 }
