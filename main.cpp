@@ -33,7 +33,6 @@ uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 20;
  *  - However, when setting fluid width / height / depth, respective local group sizes must be divisors of size in each dimension (local group size (5, 5, 5) works with fluid size (20, 20, 20), but not with (21, 20, 20) (x dimension invalid))
  *  - Global dispatch size, or dispatch size in code for short, represents number of local work groups in each dimensions - for aforementioned local group size (5, 5, 5) and fluid size (20, 20, 20), dispatch size would be (20 / 5, 20 / 5, 20 / 5) = (4, 4, 4)
 */
-
 Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 //local group size (must match value written in shaders)
 Size3 fluid_local_group_size{5, 5, 5};
@@ -143,6 +142,9 @@ const glm::vec3 render_surface_ambient_color{0, 0, 0.3};
 const glm::vec3 render_light_direction{1, -3, 1};
 const glm::vec3 render_surface_diffuse_color{0, 0.8, 0.7};
 
+//render background color (black)
+const ClearValue background_color{0.0f, 0.0f, 0.0f};
+
 //fluid surface is rendered at the border between neighboring cells (each computation will use current cell and the one after that) - for this reason, the total number of cells in each dimension is surface_render_dimension - 1
 const Size3 fluid_surface_render_size{surface_render_size.x - 1, surface_render_size.y - 1, surface_render_size.z - 1};
 
@@ -205,9 +207,9 @@ int main(){
     ExtImage pressures_2_img = pressures_image_info.create();
     ExtImage divergence_img = pressures_image_info.create(); //settings for divergence are the same as for pressure
 
+    ExtImage densities_image = ImageInfo(fluid_width, fluid_height, fluid_depth, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT).create();
 
     ImageInfo detailed_densities_info(surface_render_size.x, surface_render_size.y, surface_render_size.z, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-    ExtImage densities_image = detailed_densities_info.create();
     ExtImage detailed_densities_image = detailed_densities_info.create();
     ExtImage detailed_densities_inertia_image = detailed_densities_info.create();
 
@@ -230,12 +232,11 @@ int main(){
 
     //buffer for all particles (3 values position, 1 for determining whether particle is active or not)
     Buffer particles_buffer = BufferInfo(particle_space_size * 4 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT).create();
-    
 
-    
+    //buffers for marching cubes method
     MarchingCubesBuffers marching_cubes;
 
-
+    //data for uniform buffer containing all simulation parameters. Buffer layout is described in shaders_fluid/fluids_uniform_buffer_layout.txt
     UniformBufferRawDataSTD140 fluid_params_uniform_buffer;
     fluid_params_uniform_buffer
         .writeIVec3((int32_t*) &fluid_size).write(fluid_size.volume())
@@ -252,27 +253,33 @@ int main(){
         .write(render_light_direction).write(render_surface_ambient_color).write(render_surface_diffuse_color)
         .write(fluid_surface_render_size);
 
+    //create the buffer that will hold all simulation parameters
     Buffer simulation_parameters_buffer = BufferInfo(fluid_params_uniform_buffer, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT).create();
 
-
-    
-
+    //allocate GPU memory for all buffers
     BufferMemoryObject buffer_memory({particles_buffer, marching_cubes.triangle_count_buffer, marching_cubes.vertex_edge_indices_buffer, simulation_parameters_buffer}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+    //load marching cubes buffer data from files and copy them to the GPU
     marching_cubes.loadData(device_local_buffer_creator);
+    //copy fluid parameters buffer to the GPU
     device_local_buffer_creator.copyToLocal(fluid_params_uniform_buffer, simulation_parameters_buffer);
 
+    //sampler used for getting velocity texture values. Includes linear interpolation, coordinates from 0 to texture size, and clamping values to edge
     VkSampler velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
 
-    enum Attachments{
+    //Enum of all images that are used during the simulation
+    enum ImageAttachments{
         VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_IMG, DETAILED_DENSITIES_IMG, DETAILED_DENSITIES_INERTIA_IMG, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
     };
+    //enum of all buffers that are used during the simulation
     enum BufferAttachments{
         PARTICLES_BUF, MARCHING_CUBES_COUNTS_BUF, MARCHING_CUBES_EDGES_BUF, SIMULATION_PARAMS_BUF, BUFFER_COUNT
     };
 
+    //descriptors created with this stage will be used only during compute shader
     DescriptorUsageStage usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
+    //Holds all images and buffers, and the states they are currently in
     FlowBufferContext flow_context{
         {velocities_1_img, velocities_2_img, cell_types_img, cell_types_new_img, pressures_1_img, pressures_2_img, divergence_img, densities_image, detailed_densities_image, detailed_densities_inertia_image,  float_densities_1_img, float_densities_2_img, depth_test_image},
         vector<PipelineImageState>(IMAGE_COUNT, PipelineImageState{ImageState{IMAGE_NEWLY_CREATED}}),
@@ -280,20 +287,36 @@ int main(){
         vector<PipelineBufferState>(BUFFER_COUNT, PipelineBufferState{BufferState{BUFFER_NEWLY_CREATED}})
     };    
 
-    
-    
-
+    //Initialize shader context - Load all shaders
     DirectoryPipelinesContext fluid_context("shaders_fluid");
 
+    //simulation params buffer is used many times with the same parameters, create a variable for it
     FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_buffer", SIMULATION_PARAMS_BUF, usage_compute, BufferState{BUFFER_UNIFORM}};
 
+    /**
+     * All sections and their purpose in the simulation will be explained elsewhere, this is just a short introduction into parameters are used to construct each section.
+     *  - A FlowSection is a single operation on the GPU. Sections can run in parallel, however, when two sections use the same texture, second one will wait for the first one to finish. Sections used are:
+     *    - FlowClearColorSection - fills an image with the given clear value. Parameters are - context, image to clear, clear color
+     *    - FlowComputeSection - Runs a single compute shader. Parameters - shader context, shader directory name, DESCRIPTORS_USED, global dispatch size
+     *    - FlowGraphicsSection - Runs a single graphics pipeline, possibly with multiple shaders. Parameters - shader context, shader dir name, DESCRIPTORS_USED, vertex count, graphics pipeline info, render_pass
+     *    - FlowComputePushConstantSection & FlowGraphicsPushConstantSection - These are normal Compute/Graphics sections with added support for push constants in shaders
+     * - DESCRIPTORS_USED
+     *    - This parameter describes all descriptors used by the section. This includes descriptor context and list of images/buffers:
+     *       - Each descriptor contains: name in shaders, index in descriptor context, usage(in which shader stages the descriptor is used), and state, in which the image/buffer should be during this section
+     *          - States include STORAGE_R(reading from shaders), STORAGE_W(writing in shaders), STORAGE_RW(both) and SAMPLER(being sampled in shaders)
+     * - The following list, although long, only specifies the order of sections, and what images/buffers are used. 
+     */
+    
+
+    //List of sections that will be executed before simulation start
     SectionList init_sections{
-        new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f)),
-        new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f)),
+        new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f, 0.f)),
+        new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f, 0.f)),
         new FlowClearColorSection(flow_context,   CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
         new FlowClearColorSection(flow_context,  PRESSURES_1, ClearValue(0.f)),
         new FlowClearColorSection(flow_context,  PRESSURES_2, ClearValue(0.f)),
         new FlowClearColorSection(flow_context,  DIVERGENCES, ClearValue(0.f)),
+        new FlowClearColorSection(flow_context,  DETAILED_DENSITIES_INERTIA_IMG, ClearValue(0)),
         new FlowComputeSection(
             fluid_context, "00_init_particles",
             FlowPipelineSectionDescriptors{
@@ -308,7 +331,7 @@ int main(){
     };
 
     
-
+    //All sections that will run each frame, before pressure solve
     SectionList draw_section_list_1{
         new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
         new FlowClearColorSection(flow_context, PARTICLE_DENSITIES_IMG, ClearValue((uint32_t) 0)),
@@ -451,7 +474,7 @@ int main(){
         new FlowClearColorSection(flow_context, PRESSURES_2, ClearValue(simulation_air_pressure)),
     };
 
-
+    //section used to solve for pressure
     auto pressure_section = new FlowComputePushConstantSection(
         fluid_context, "13_solve_pressure",
         FlowPipelineSectionDescriptors{
@@ -468,7 +491,7 @@ int main(){
     );
     SectionList pressure_solve_section_list(pressure_section);
 
-
+    //sections used after pressure solve
     SectionList draw_section_list_2{
         new FlowComputeSection(
             fluid_context, "14_fix_divergence",
@@ -534,6 +557,7 @@ int main(){
         ),
     };
 
+    //section used to blur densities
     auto float_densities_diffuse_section = new FlowComputePushConstantSection(
         fluid_context, "20_diffuse_float_densities",
         FlowPipelineSectionDescriptors{
@@ -549,17 +573,20 @@ int main(){
     );
     SectionList float_densities_diffuse_section_list(float_densities_diffuse_section);
 
-    // * Create a render pass *
+    // * Create a render pass - all graphics shaders must be executed inside one, this render pass uses previously created depth image and images that can be displayed into the app window*
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}.create();
-    RenderPassSettings render_pass_settings{screen_width, screen_height, {{0.0f, 0.0f, 0.0f}, {1.f, 0U}}};
+    RenderPassSettings render_pass_settings{screen_width, screen_height, {background_color, {1.f, 0U}}};
 
-    // * Create framebuffers for all swapchain images *
+    // * Create framebuffers for all swapchain images, using given depth image *
     swapchain.createFramebuffers(render_pass, depth_test_image);
 
-
+    //setup render pipeline info
     PipelineInfo render_pipeline_info{screen_width, screen_height, 1};
+    //all vertices will be interpreted as points
     render_pipeline_info.getAssemblyInfo().setTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
+    //enable depth testing
     render_pipeline_info.getDepthStencilInfo().enableDepthTest().enableDepthWrite();
+    //section used for rendering particles
     auto render_section = new FlowGraphicsPushConstantSection(
         fluid_context, "30_render_particles",
         FlowPipelineSectionDescriptors{
@@ -571,6 +598,7 @@ int main(){
         },
         particle_space_size, render_pipeline_info, render_pass
     );
+    //section used for rendering surface
     auto render_surface_section = new FlowGraphicsPushConstantSection(
         fluid_context, "31_render_surface",
         FlowPipelineSectionDescriptors{
@@ -584,8 +612,9 @@ int main(){
         },
         fluid_surface_render_size.volume(), render_pipeline_info, render_pass
     );
+    //section that can be used to display contents of 3D textures, used for debugging
     /*auto display_data_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "32_display_data",
+        fluid_context, "32_debug_display_data",
         FlowPipelineSectionDescriptors{
             flow_context,
             vector<FlowPipelineSectionDescriptorUsage>{
@@ -601,25 +630,38 @@ int main(){
     */
     SectionList render_section_list(render_section, render_surface_section);
 
+    //when all sections were created, each one recorded which descriptors it needed to function, now all descriptors can be allocated from a shared descriptor set
     fluid_context.createDescriptorPool();
 
 
-    FlowCommandBuffer init_buffer{init_command_pool};
-    init_sections.complete();
-    init_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    init_buffer.record(flow_context, init_sections);
-    init_buffer.cmdBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 
-        depth_test_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_DEPTH_STENCIL_ATTACHMENT})    
-    );
-    init_buffer.endRecord();    
+    
 
+    //Complete all sections - this is needed to update all descriptors
+    init_sections.complete();   
     draw_section_list_1.complete();
     pressure_solve_section_list.complete();
     draw_section_list_2.complete();
     float_densities_diffuse_section_list.complete();
     render_section_list.complete();
 
-    
+    //record command buffer responsible for initializing the simulation
+    FlowCommandBuffer init_buffer{init_command_pool};
+    init_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    //record all sections used during initialization into the command buffer
+    init_buffer.record(flow_context, init_sections);
+    //transition depth image to be used as a depth attachment next frame
+    init_buffer.cmdBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 
+        depth_test_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_DEPTH_STENCIL_ATTACHMENT})    
+    );
+    init_buffer.endRecord();
+    //create a synchronization object to track whether initialization has finished
+    SubmitSynchronization init_sync;
+    //add fence - it will be signalled when submission finishes, CPU can see its' state
+    init_sync.setEndFence(Fence());
+    //submit all initialization commands to be executed
+    queue.submit(init_buffer, init_sync);
+    //wait at most one second for all commands to finish
+    init_sync.waitFor(SYNC_SECOND);
 
 
     // * Initialize projection matrices and camera * 
@@ -630,92 +672,111 @@ int main(){
     glm::mat4 projection = glm::perspective(glm::radians(45.f), 1.f*window.getWidth() / window.getHeight(), 0.1f, 200.f) * invert_y_mat;
     glm::mat4 MVP;
 
+    //Semaphore is a synchronization object, it will be signalled after one simulation step finishes and rendering can begin, it is watchable by the GPU
+    Semaphore simulation_step_end_semaphore;
 
-    Semaphore draw_end_semaphore;
+    //Watches whether simulation step is finished
+    SubmitSynchronization simulation_step_synchronization;
+    //add semaphore to be signalled when simulation step finishes executing
+    simulation_step_synchronization.addEndSemaphore(simulation_step_end_semaphore);
 
-    // * Structures to watch status of currently sent frame *
-    SubmitSynchronization draw_synchronization;
-    draw_synchronization.addEndSemaphore(draw_end_semaphore);
-
+    //Watches whether rendering is finished
     SubmitSynchronization render_synchronization;
-    render_synchronization.addStartSemaphore(draw_end_semaphore);
+    render_synchronization.addStartSemaphore(simulation_step_end_semaphore);
+    //add fence to be signalled when rendering finishes
     render_synchronization.setEndFence(Fence());
 
-    SubmitSynchronization init_sync;
-    init_sync.setEndFence(Fence());
-    queue.submit(init_buffer, init_sync);
-    init_sync.waitFor(SYNC_FRAME);
-    
     FlowCommandBuffer render_command_buffer(render_command_pool);
-    FlowCommandBuffer draw_buffer(render_command_pool);
+    FlowCommandBuffer simulation_step_buffer(render_command_pool);
 
+    //whether simulation is paused - during a pause, simulation is static, but camera can still move
     bool paused = false;
 
-    while (window.running())
-    {
+    //while user hasn't closed the window
+    while (window.running()){
         window.update();
-        camera.update(0.01f);
+        
+        //move camera according to its' velocity and keys pressed
+        camera.update(simulation_time_step);
 
+        //if Q or E keys are pressed, pause/resume the simulation
         if (window.keyOn(GLFW_KEY_Q)) paused = true;
         if (window.keyOn(GLFW_KEY_E)) paused = false;
 
+        //if simulation isn't paused
         if (!paused){
-            draw_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-            draw_buffer.record(flow_context, draw_section_list_1);
+            simulation_step_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+            //record all sections before pressure solve
+            simulation_step_buffer.record(flow_context, draw_section_list_1);
 
+            //use iterative algorithm to solve for pressures
             for (uint32_t i = 0; i < divergence_solve_iterations; i++){
                 pressure_section->getPushConstantData().write("is_even_iteration", (i % 2 == 0) ? 1U : 0U);
-                draw_buffer.record(flow_context, pressure_solve_section_list);
+                simulation_step_buffer.record(flow_context, pressure_solve_section_list);
             }
-            
-            draw_buffer.record(flow_context, draw_section_list_2);
+            //record all sections after pressure solve
+            simulation_step_buffer.record(flow_context, draw_section_list_2);
 
+            //go through all densities blur steps
             for (uint32_t i = 0; i < float_density_diffuse_steps; i++){
                 float_densities_diffuse_section->getPushConstantData().write("is_even_iteration", (i % 2 == 0) ? 1U : 0U);
-                draw_buffer.record(flow_context, float_densities_diffuse_section_list);
+                simulation_step_buffer.record(flow_context, float_densities_diffuse_section_list);
             }
-
-            draw_buffer.endRecord();
+            
+            simulation_step_buffer.endRecord();
         
-            queue.submit(draw_buffer, draw_synchronization);
+            //submit recorded command buffer to the queue
+            queue.submit(simulation_step_buffer, simulation_step_synchronization);
         }
         
 
-        //get current image to render into
+        //get current window image to render into
         SwapchainImage swapchain_image = swapchain.acquireImage();
 
         render_command_buffer.startRecordPrimary(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         
+        //transition window image to be rendered into
         render_command_buffer.cmdBarrier(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             swapchain_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_COLOR_ATTACHMENT})
         );
+        //transition all images to be ready for rendering. Normally, this is a part of command_buffer.record call, however, that is not possible during a render pass
+        // -> .record is split into two parts, transitionAllImages and execute()
         render_section->transitionAllImages(render_command_buffer, flow_context);
         //display_data_section->transitionAllImages(render_command_buffer, flow_context);
         render_surface_section->transitionAllImages(render_command_buffer, flow_context);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
 
+        //compute model-view-projection matrix
         MVP = projection * camera.view_matrix;
+        //push MVP to be used by particle render shader
         render_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+        //execute the section that renders all particles
         render_section->execute(render_command_buffer);
         /*display_data_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
         display_data_section->execute(render_command_buffer);*/
+
+        //push MVP to be used by surface render shader
         render_surface_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+        //execute the section that 
         render_surface_section->execute(render_command_buffer);
         render_command_buffer.cmdEndRenderPass();
         render_command_buffer.endRecord();
         
-        
-        // * Submit command buffer and wait for it to finish*
+        //wait until window image can be rendered into
         swapchain.prepareToDraw();
+        //execute render command buffer
         queue.submit(render_command_buffer, render_synchronization);
+        //wait for rendering to finish
         render_synchronization.waitFor(SYNC_SECOND);
         
-        // * Present rendered image and reset buffer for next frame *
+        //present rendered image
         swapchain.presentImage(swapchain_image, present_queue);
 
-        draw_buffer.resetBuffer(false);
+        //reset recorded command buffers
+        simulation_step_buffer.resetBuffer(false);
         render_command_buffer.resetBuffer(false);
     }
+    //wait for all operations on main queue to finish, then end the app
     queue.waitFor();
     return 0;
 }
