@@ -1,21 +1,28 @@
 #version 450
 
+
+/**
+ * float_densities.comp
+ *  - Convert densities (or inertias in this case) into their floating point representation: -1.f if equal to zero, or a / k if not. a is density value, k is a shared constant
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 144) float dens_division_coefficient;
+    layout(offset = 144) float dens_division_coefficient;       //constant, by which non-zero densities are divided
 };
 layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D densities_inertia;
 layout(set = 0, binding = 2, r32f) uniform restrict writeonly image3D float_densities;
 
 
-const float dens_division_coeff = 20.0;
 
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    //load current density
     uint dens = imageLoad(densities_inertia, i).x;
-    float d = (dens == 0) ? -1 : dens / dens_division_coeff;
-    imageStore(float_densities, i, vec4(d, 0, 0, 0));
+    //save result - -1 if equal to 0, dens / dens_division_coefficient else
+    imageStore(float_densities, i, vec4((dens == 0) ? -1 : dens / dens_division_coefficient, 0, 0, 0));
 }

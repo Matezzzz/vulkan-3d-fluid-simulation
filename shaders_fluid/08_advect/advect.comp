@@ -1,12 +1,19 @@
 #version 450
+//required for texelFetch
 #extension GL_EXT_samplerless_texture_functions : require
+
+
+/**
+ * advect.comp
+ *  - This shader is responsible for advection of velocities
+ */
 
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 20) int cell_type_air;
-    layout(offset = 24) int cell_type_water;
-    layout(offset = 32) float time_delta;
+    layout(offset = 20) int cell_type_air;      //uint representing air in cell_types
+    layout(offset = 24) int cell_type_water;    //uint representing water in cell_types
+    layout(offset = 32) float time_delta;       //time step
 };
 layout(set = 0, binding = 1, r8ui)    uniform readonly restrict uimage3D cell_types;
 layout(set = 0, binding = 2)          uniform sampler3D velocities_src;
@@ -14,10 +21,11 @@ layout(set = 0, binding = 3, rgba32f) uniform writeonly restrict image3D velocit
 
 
 
-
+//return cell type at given position
 uint cellAt(ivec3 i){
     return imageLoad(cell_types, i).x;
 }
+//return true if given cell type is water or air
 bool isActive(uint type){
     return (type == cell_type_air || type == cell_type_water);
 }
@@ -25,40 +33,64 @@ bool isWater(uint type){
     return (type == cell_type_water);
 }
 
-float getVelocityXAt(vec3 pos){
-    return texture(velocities_src, pos + vec3(0.5, 0, 0)).x;
-}
-float getVelocityYAt(vec3 pos){
-    return texture(velocities_src, pos + vec3(0, 0.5, 0)).y;
-}
-float getVelocityZAt(vec3 pos){
-    return texture(velocities_src, pos + vec3(0, 0, 0.5)).z;
+/*
+ * The following functions return velocity at given position, using interpolation. 
+ *  - Velocity components are not defined at the center of cells, but at the borders like this (arrows represent velocity vectors, - and | cell borders)
+
+         ^
+    -----|---
+    |       |
+    |-->    |
+    |       |
+    ---------
+
+    This means that the coordinates are slightly shifted for each coordinate, and cannot be sampled together.
+    The following function is used to return interpolated value of a component at given point in world space.
+
+ */
+float getVelocityCompAt(vec3 pos, int comp){
+    vec3 move = vec3(0,0,0);
+    move[comp] = 0.5;
+    return texture(velocities_src, pos + move)[comp];
 }
 vec3 getVelocityAt(vec3 pos){
-    return vec3(getVelocityXAt(pos), getVelocityYAt(pos), getVelocityZAt(pos));
+    return vec3(getVelocityCompAt(pos, 0), getVelocityCompAt(pos, 1), getVelocityCompAt(pos, 2));
 }
+
+
+
+float advectComponent(vec3 cur_velocity, ivec3 pos, bool cur_active, int comp_i){
+    //move to compute position of cell adjacent to border the velocity is defined on
+    ivec3 move = ivec3(0, 0, 0);
+    move[comp_i] = -1;
+    //if current cell or the one across the border the velocity is defined on is active, perform the following
+    if (pos[comp_i] != 0 && (cur_active || isWater(cellAt(pos - move)))){
+        //move to compute position in texture for this component
+        vec3 fmove = vec3(0.5, 0.5, 0.5);
+        fmove[comp_i] = 0;
+        //compute position of x velocity in current texture
+        vec3 pos_in_tex = vec3(pos) + fmove;
+        //sample velocity at given coordinates
+        vec3 cur_v = getVelocityAt(pos_in_tex);
+        //using simple backtracking, find out current velocity for the x component in original velocity field
+        return getVelocityCompAt(pos_in_tex - cur_v*time_delta, comp_i);
+    }
+    return cur_velocity[comp_i];
+}
+
 
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    //get velocity currently saved in this cell
     vec3 velocity = texelFetch(velocities_src, i, 0).xyz;
-    uint local_type = cellAt(i);
-
-    bool cur_active = isWater(local_type);
-    if (i.x != 0 && (cur_active || isWater(cellAt(i - ivec3(1, 0, 0))))){
-        vec3 pos_in_tex = vec3(i) + vec3(0, 0.5, 0.5);
-        vec3 cur_v = getVelocityAt(pos_in_tex);
-        velocity.x = getVelocityXAt(pos_in_tex - cur_v*time_delta);
+    /*
+     * The following ifs perform the actual advection.
+     * As each velocity component is at different point in space, I need to sample original velocity field three times and perform advection on each component alone.
+     */
+    for (int j = 0; j < 3; j++){
+        velocity[j] = advectComponent(velocity, i, isWater(cellAt(i)), j);
     }
-    if (i.y != 0 && (cur_active || isWater(cellAt(i - ivec3(0, 1, 0))))){
-        vec3 pos_in_tex = vec3(i) + vec3(0.5, 0, 0.5);
-        vec3 cur_v = getVelocityAt(pos_in_tex);
-        velocity.y = getVelocityYAt(pos_in_tex - cur_v*time_delta);
-    }
-    if (i.z != 0 && (cur_active || isWater(cellAt(i - ivec3(0, 0, 1))))){
-        vec3 pos_in_tex = vec3(i) + vec3(0.5, 0.5, 0);
-        vec3 cur_v = getVelocityAt(pos_in_tex);
-        velocity.z = getVelocityZAt(pos_in_tex - cur_v*time_delta);
-    }
+    //save advected velocity
     imageStore(velocities_dst, i, vec4(velocity, 0.0));
 }

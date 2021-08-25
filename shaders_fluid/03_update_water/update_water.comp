@@ -1,12 +1,19 @@
 #version 450
 
+
+/**
+ * update_water.comp
+ *  - This shader uses an array of densities to determine where in the grid is water and where is air
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 20) int cell_type_air;
-    layout(offset = 24) int cell_type_water;
+    layout(offset = 16) int cell_type_inactive;     //uint representing inactive cells in cell_types texture
+    layout(offset = 24) int cell_type_water;        //uint representing water in cell_types texture
 };
 layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D particle_densities;
 layout(set = 0, binding = 2, r8ui) uniform restrict writeonly uimage3D cell_types;
@@ -16,10 +23,12 @@ layout(set = 0, binding = 2, r8ui) uniform restrict writeonly uimage3D cell_type
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     int type;
+    //if the amount of particles in current grid cell is not zero, set cell type to water, else set it to air
     if (imageLoad(particle_densities, i).x > 0){
         type = cell_type_water;
     }else{
-        type = cell_type_air;
+        type = cell_type_inactive;
     }
+    //store cell type determined above into the cell types texture
     imageStore(cell_types, i, uvec4(type, 0, 0, 0));
 }

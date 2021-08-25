@@ -1,0 +1,30 @@
+#version 450
+
+
+/**
+ * compute_divergence.comp
+ *  - this shader computes divergences for every field in the grid.
+ */
+
+layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform restrict readonly image3D velocities;
+layout(set = 0, binding = 1, r32f)    uniform restrict writeonly image3D divergences;
+
+vec3 getVelocity(ivec3 pos){
+    return imageLoad(velocities, pos).xyz;
+}
+
+float computeDivergence(ivec3 pos){
+    vec3 v = getVelocity(pos);
+    //divergence is equal to the sum of fluid flowing out - sum of fluid flowing in
+    return getVelocity(pos + ivec3(1,0,0)).x - v.x + getVelocity(pos + ivec3(0,1,0)).y - v.y + getVelocity(pos + ivec3(0,0,1)).z - v.z;
+}
+
+void main(){
+    ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    
+    float div = computeDivergence(i);
+    //save computed divergence
+    imageStore(divergences, i, vec4(div, 0, 0, 0));
+}

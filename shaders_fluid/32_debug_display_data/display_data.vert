@@ -1,6 +1,9 @@
 #version 450
 
-
+/**
+ * display_data.vert
+ *  - This shader can be used to display some data in fluid grid as colored points.
+ */
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 0) uvec3 fluid_size;

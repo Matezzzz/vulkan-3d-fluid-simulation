@@ -1,5 +1,11 @@
 #version 450
 
+/**
+ * extrapolate_velocities.comp
+ *  - This sets the velocities of active cells that were inactive during previous steps, using extrapolated velocities from previous step
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 20) int cell_type_air;
@@ -11,16 +17,14 @@ layout(set = 0, binding = 3, rgba32f) uniform restrict image3D velocities;
 layout(set = 0, binding = 4, rgba32f) uniform restrict readonly image3D extrapolated_velocitites;
 
 
-
-
+//return old cell type at given position
 uint oldCellAt(ivec3 pos){
     return imageLoad(cell_types, pos).x;
 }
-
+//return new cell type at given position
 uint newCellAt(ivec3 pos){
     return imageLoad(new_cell_types, pos).x;
 }
-
 bool isAir(uint a){
     return (a == cell_type_air);
 }
@@ -30,50 +34,67 @@ bool isWater(uint a){
 bool isActive(uint a){
     return (isWater(a) || isAir(a));
 }
-
+//load extrapolated velocity from texture computed in the previous step
 vec3 getExtrapolatedVelocity(ivec3 i){
     return imageLoad(extrapolated_velocitites, i).xyz;
 }
 
-
+//enum for the action to take on the current field
 const int VELOCITY_DO_NOTHING = 0;
 const int VELOCITY_RESET = 1;
 const int VELOCITY_EXTRAPOLATE = 2;
+//get new velocity state - determines whether velocity in one dimension should be reset / extrapolated / kept
+//velocities are defined on cell borders - was_active and is_active are states of current cell, i is position across the border
 int getNewVelocityState(bool was_active, bool is_active, ivec3 i){
+    //if current cell was active last frame or cell accross the border was active, this velocity was active last frame
     bool vel_was_active = was_active || isActive(oldCellAt(i));
+    //if current cell is active or cell accross the border is active, this velocity is active
     bool vel_is_active  =  is_active || isActive(newCellAt(i));
+
     if (vel_was_active){
-        if (vel_is_active){
+        if (vel_is_active){     //if velocity was active and still is, do nothing
             return VELOCITY_DO_NOTHING;
-        }else{
+        }else{                  //if velocity was active and isn't now, reset it to 0
             return VELOCITY_RESET;
         }
     }else{
-        if (vel_is_active){
+        if (vel_is_active){     //if velocity was not active and is now, extrapolate it
             return VELOCITY_EXTRAPOLATE;
-        }else{
+        }else{                  //if velocity was active and is not now, leave it be
             return VELOCITY_DO_NOTHING;
         }
     }
 }
 
-float getNewVelocityComponent(vec3 base_velocity, vec3 extrapolated_velocity, bool was_active, bool is_active, ivec3 i, int comp){
-    ivec3 move = ivec3(0, 0, 0);
-    move[comp] = -1;
+//Gets one component (x, y or z) of extrapolated velocity
+//parameters: current_velocity - current velocity in this cell; extrapolated_velocity - extrapolated velocity for this cell;
+//was_active - whether current cell was active last update; is_active - whether current cell is active now; i - position of current cell; comp - which component should be computed
+float getNewVelocityComponent(vec3 current_velocity, vec3 extrapolated_velocity, bool was_active, bool is_active, ivec3 i, int comp){
+    //compute index of cell across the border (on which the velocity is specified)
+    i[comp] -= 1;
     
-    int vel_state = getNewVelocityState(was_active, is_active, i + move);
-    if (vel_state == VELOCITY_DO_NOTHING) return base_velocity[comp];
+    //find out state of velocity on current border (VELOCITY_DO_NOTHING, VELOCITY_RESET or VELOCITY_EXTRAPOLATE)
+    int vel_state = getNewVelocityState(was_active, is_active, i);
+    //if nothing has to be done, keep velocity the same
+    if (vel_state == VELOCITY_DO_NOTHING) return current_velocity[comp];
+    //reset velocity to 0 if needed
     if (vel_state == VELOCITY_RESET) return 0;
+    //else, return extrapolated velocity
     return extrapolated_velocity[comp];
 }
 
 vec3 getNewVelocity(ivec3 i){
+    //was current cell active last frame
     bool local_was_active = isActive(oldCellAt(i));
+    //is current cell active now
     bool local_is_active  = isActive(newCellAt(i));
 
+    //get current velocity at cell position
     vec3 base_vel = imageLoad(velocities, i).xyz;
+    //get extrapolated velocity at cell position
     vec3 extrapolated_vel = getExtrapolatedVelocity(i);
 
+    //compute velocity components for each dimension, then return them as a vec3
     return vec3(
         getNewVelocityComponent(base_vel, extrapolated_vel, local_was_active, local_is_active, i, 0),
         getNewVelocityComponent(base_vel, extrapolated_vel, local_was_active, local_is_active, i, 1),
@@ -83,6 +104,7 @@ vec3 getNewVelocity(ivec3 i){
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    //compute new velocity, then save it into velocities texture
     imageStore(velocities, i, vec4(getNewVelocity(i), 0.0));        
 }
 

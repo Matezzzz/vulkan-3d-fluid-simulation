@@ -1,5 +1,14 @@
 #version 450
 
+
+/**
+ * extrapolated_velocities.comp
+ *  - Extrapolate air velocities from surrounding water cells and save them. They will be set where needed during next step.
+ */
+
+
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
@@ -10,31 +19,46 @@ layout(set = 0, binding = 2, rgba32f) uniform restrict readonly image3D velociti
 layout(set = 0, binding = 3, rgba32f) uniform restrict writeonly image3D extrapolated_velocities;
 
 
+//load cell type at given position
 uint cellAt(ivec3 pos){
     return imageLoad(cell_types, pos).x;
 }
+//return true if given cell type represents water
 bool isWater(uint a){
     return (a == cell_type_water);
 }
+vec4 getVelocity(ivec3 pos){
+    return imageLoad(velocities, pos);
+}
 
+
+
+//extrapolated velocity is the average of neighbouring water velocities
 vec3 getExtrapolatedVelocity(ivec3 i){
+    //how many velocities are we taking the average of
     int c = 0;
+    //sum of surrounding velocities
     vec4 v = vec4(0, 0, 0, 0);
+    //represents border coordinates when using imageLoad function - velocity cannot be sampled outside of these
     ivec3 b = imageSize(velocities) - ivec3(1, 1, 1);
 
-    if (i.x != 0   && isWater(cellAt(i - ivec3(1, 0, 0)))){ v += imageLoad(velocities, i - ivec3(1, 0, 0)); c++; }
-    if (i.y != 0   && isWater(cellAt(i - ivec3(0, 1, 0)))){ v += imageLoad(velocities, i - ivec3(0, 1, 0)); c++; }
-    if (i.z != 0   && isWater(cellAt(i - ivec3(0, 0, 1)))){ v += imageLoad(velocities, i - ivec3(0, 0, 1)); c++; }
-    if (i.x != b.x && isWater(cellAt(i + ivec3(1, 0, 0)))){ v += imageLoad(velocities, i + ivec3(1, 0, 0)); c++; }
-    if (i.y != b.y && isWater(cellAt(i + ivec3(0, 1, 0)))){ v += imageLoad(velocities, i + ivec3(0, 1, 0)); c++; }
-    if (i.z != b.z && isWater(cellAt(i + ivec3(0, 0, 1)))){ v += imageLoad(velocities, i + ivec3(0, 0, 1)); c++; }
+    //all conditions represent the following - if cell isn't at the border, and neighboring cell in the given direction is water, count its' velocity towards average
+    if (i.x != 0   && isWater(cellAt(i - ivec3(1, 0, 0)))){ v += getVelocity(i - ivec3(1, 0, 0)); c++; }
+    if (i.y != 0   && isWater(cellAt(i - ivec3(0, 1, 0)))){ v += getVelocity(i - ivec3(0, 1, 0)); c++; }
+    if (i.z != 0   && isWater(cellAt(i - ivec3(0, 0, 1)))){ v += getVelocity(i - ivec3(0, 0, 1)); c++; }
+    if (i.x != b.x && isWater(cellAt(i + ivec3(1, 0, 0)))){ v += getVelocity(i + ivec3(1, 0, 0)); c++; }
+    if (i.y != b.y && isWater(cellAt(i + ivec3(0, 1, 0)))){ v += getVelocity(i + ivec3(0, 1, 0)); c++; }
+    if (i.z != b.z && isWater(cellAt(i + ivec3(0, 0, 1)))){ v += getVelocity(i + ivec3(0, 0, 1)); c++; }
+    //if there are any valid cells to take average velocity from, return the average
     if (c != 0) return v.xyz / c;
+    //else return null vector
     return vec3(0, 0, 0);
 }
 
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    //compute extrapolated velocity and save it
     imageStore(extrapolated_velocities, i, vec4(getExtrapolatedVelocity(i), 0.0));      
 }
 

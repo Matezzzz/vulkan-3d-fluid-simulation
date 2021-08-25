@@ -1,13 +1,18 @@
 #version 450
 
-
+/**
+ * update_detailed_densities.comp
+ *  - This computes particle densities in the detailed grid.
+ */
+ 
 const int PARTICLE_BUFFER_SIZE = 1000000;
 
 
 layout(local_size_x = 1000) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 116) int detailed_resolution;
+    layout(offset = 116) int detailed_resolution;       //how many subsections does detailed grid have per one cell side
+    layout(offset = 236) float active_particle_w;       //particle W coordinate will have this value if particle takes part in the simulation
 };
 layout(set = 0, binding = 1) buffer restrict readonly particles{
     vec4 particle_positions[PARTICLE_BUFFER_SIZE];
@@ -19,7 +24,9 @@ layout(set = 0, binding = 2, r32ui) uniform restrict coherent uimage3D particle_
 void main(){
     int i = int(gl_GlobalInvocationID.x);
     vec4 pos = particle_positions[i];
-    if (pos.w == 1.0){
+    //if particle is active
+    if (pos.w == active_particle_w){
+        //add 1 to the grid cell the particle is in
         imageAtomicAdd(particle_densities, ivec3(pos.xyz * detailed_resolution), 1);
     }
 }

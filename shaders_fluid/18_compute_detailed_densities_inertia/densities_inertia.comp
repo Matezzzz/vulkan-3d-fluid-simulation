@@ -1,16 +1,19 @@
 #version 450
 
-
+/**
+ * densities_inertia.comp
+ *  - Tries to smooth detailed densities in time. This process is described in more detail in main.cpp, where constants regarding this process are defined. Look for label 'Fluid surface rendering'
+ */
 
 
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 124) int max_inertia;
-    layout(offset = 128) int inertia_increase_filled;
-    layout(offset = 132) int required_neighbour_hits;
-    layout(offset = 136) int inertia_increase_neighbour;
-    layout(offset = 140) int inertia_decrease;
+    layout(offset = 124) int max_inertia;                   //max inertia value in each cell
+    layout(offset = 128) int inertia_increase_filled;       //how much does inertia increase if particle is present in current grid cell
+    layout(offset = 132) int required_neighbour_hits;       //how many neighbours have to have non-zero densities for neighbour inertia increase to apply
+    layout(offset = 136) int inertia_increase_neighbour;    //how much is inertia increased per filled neighbour, if enough neighbours are filled
+    layout(offset = 140) int inertia_decrease;              //how much does inertia decrease when not increased
 };
 layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D particle_densities;
 layout(set = 0, binding = 2, r32ui) uniform restrict uimage3D densities_inertia;
@@ -27,21 +30,26 @@ uint densityAt(ivec3 pos){
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
 
+    //load old inertia
     uint inertia = imageLoad(densities_inertia, i).x;
     uint old_inertia = inertia;
 
-    if (inertia < max_inertia){
-        if (densityAt(i) > 0){
-            inertia += inertia_increase_filled;
-        }
-        int hit_count = 0;
-        for (int j = 0; j < 6; j++){
-            if (densityAt(i + moves[j]) > 0){
-                hit_count += inertia_increase_neighbour;
-            }
-        }
-        if (hit_count >= required_neighbour_hits) inertia += hit_count * 2;
+    //if particle density in this field is greater than 0, increase inertia
+    if (densityAt(i) > 0){
+        inertia += inertia_increase_filled;
     }
+
+    //how many neighbours are filled
+    int hit_count = 0;
+    //go through all neighbours
+    for (int j = 0; j < 6; j++){
+        //if neighbour density is greater than 0, increase neighbour count
+        if (densityAt(i + moves[j]) > 0) hit_count += 1;
+    }
+    //if there were enough neighbours hit, add their total hit count to inertia
+    if (hit_count >= required_neighbour_hits) inertia += hit_count * inertia_increase_neighbour;
+    
+    //if there was no inertia added this frame, decrease it instead
     if (inertia == old_inertia){
         if (inertia > inertia_decrease){
             inertia -= inertia_decrease;
@@ -49,5 +57,6 @@ void main(){
             inertia = 0;
         }
     }
-    imageStore(densities_inertia, i, ivec4(inertia, 0, 0, 0));
+    //cap inertia at max, then store it
+    imageStore(densities_inertia, i, uvec4(min(max_inertia, inertia), 0, 0, 0));
 }

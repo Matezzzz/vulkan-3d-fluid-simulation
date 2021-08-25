@@ -1,37 +1,77 @@
 #version 450
 
+/**
+ * solids.comp
+ *  - Set all velocities that point into solid objects to small, negative versions of themselves
+ *  - Theoretically, these should be set to zero, however, using a small negative constant instead prevents particles from getting stuck near walls
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 28) int cell_type_solid;
+    layout(offset = 28)  uint cell_type_solid;          //uint representing solid cells in cell_types
+    layout(offset = 256) float solid_repel_velocity;    //velocity at which solids repel fluids (this is a small constant, used to prevent particles getting stuck in solid borders)
 };
 layout(set = 0, binding = 1, r8ui)    uniform restrict readonly uimage3D cell_types;
 layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
 
-const int CELL_SOLID = 3;
 
 
 uint cellAt(ivec3 i){
     return imageLoad(cell_types, i).x;
 }
 bool isSolid(uint a){
-    return (a == CELL_SOLID);
+    return (a == cell_type_solid);
 }
 
 
+float solidRepelCompCurrent(vec3 v, int comp_i){
+    //if the velocity into a solid is more then negated repel velocity (fluid is flowing into the solid or is flowing 'out' too slowly), set it to -solid_repel_velocity, otherwise, leave it be
+    if (v[comp_i] > -solid_repel_velocity){
+        return -solid_repel_velocity;
+    }else{
+        return v[comp_i];
+    }
+}
+vec3 solidRepelCurrent(vec3 v){
+    //go through all components flowing into current cell, and call solidRepelCompCurrent on each one. This is called only when current cell is solid.
+    for (int i = 0; i < 3; i++){
+        v[i] = solidRepelCompCurrent(v, i);
+    }
+    return v;
+}
+float solidRepelCompNext(vec3 v, int comp_i, ivec3 pos){
+    //move to compute cell across the border of current velocity
+    ivec3 move = ivec3(0, 0, 0);
+    move[comp_i] = -1;
+    //if cell accross the border is solid and fluid is flowing into the solid over the border, set it to solid repel velocity, else leave it alone
+    if (isSolid(cellAt(pos + move)) && v[comp_i] < solid_repel_velocity){
+        return solid_repel_velocity;
+    }else{
+        return v[comp_i];
+    }
+}
+vec3 solidRepelNext(vec3 v, ivec3 pos){
+    //go through all components and ensure that none of them are flowing into solids or are flowing out too slowly
+    for (int i = 0; i < 3; i++){
+        v[i] = solidRepelCompNext(v, i, pos);
+    }
+    return v;
+}
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-    vec4 v = imageLoad(velocities, i);
+    //load current velocity
+    vec3 v = imageLoad(velocities, i).xyz;
 
-    if (cellAt(i) == CELL_SOLID){
-        if (v.x > 0) v.x = 0;
-        if (v.y > 0) v.y = 0;
-        if (v.z > 0) v.z = 0;
-    }else{
-        if (isSolid(cellAt(i - ivec3(1, 0, 0))) && v.x < 0) v.x = 0;
-        if (isSolid(cellAt(i - ivec3(0, 1, 0))) && v.y < 0) v.y = 0;
-        if (isSolid(cellAt(i - ivec3(0, 0, 1))) && v.z < 0) v.z = 0;
+    //ensure that it doesn't flow inside any solids using the two functions defined above
+    if (isSolid(cellAt(i))){
+        v = solidRepelCurrent(v);
     }
-    imageStore(velocities, i, v);
+    v = solidRepelNext(v, i);
+    
+    //store computed velocity
+    imageStore(velocities, i, vec4(v, 1.0));
 }

@@ -23,7 +23,7 @@ string app_name = "Vulkan fluid simulation";
 
 
 //dimensions of fluid simulation grid
-uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 20;
+constexpr uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 20;
 
 
 /**
@@ -60,10 +60,12 @@ Size3 surface_render_dispatch_size = surface_render_size / surface_render_local_
  */
 
 //Particles are initialized as a cube, starting at given offset with given dimensions. Resolution specifies particle count for each size.
-glm::uvec3 particle_init_cube_resolution{100, 100, 100};
+Size3 particle_init_cube_resolution{100, 100, 100};
 glm::vec3 particle_init_cube_offset{5, 2, 1.5};
-glm::vec3 particle_init_cube_size{10, 10, 10};
+glm::vec3 particle_init_cube_size{10, 10, 2};
 
+//particle w coordinate will be set to this constant when particle is active, can be any number except 0
+constexpr float active_particle_w = 1;
 
 
 constexpr float simulation_time_step = 0.01;
@@ -92,10 +94,15 @@ constexpr uint32_t divergence_solve_iterations = 200;
 //particle color used when rendering
 glm::vec3 particle_render_color{1, 0, 0};
 //particle size - this number is divided by distance from camera, particles further away will appear smaller
-constexpr float particle_render_size = 20;
+constexpr float particle_render_size = 10;
+//rendered particle size will not be larger than this number. This is done to prevent really close particles spanning large portion of the screen
+constexpr float particle_render_max_size = 20;
 
 
+constexpr glm::uvec3 fountain_position{fluid_width / 2, fluid_height - 2, fluid_depth / 2};
+constexpr float fountain_force = -3000;
 
+constexpr float solid_repel_velocity = 0.01;
 
 
 /**
@@ -241,7 +248,7 @@ int main(){
         .writeIVec3((int32_t*) &fluid_size).write(fluid_size.volume())
         .write((uint32_t) CellType::CELL_INACTIVE).write((uint32_t) CellType::CELL_AIR).write((uint32_t) CellType::CELL_WATER).write((uint32_t) CellType::CELL_SOLID)
         .write(simulation_time_step).write(simulation_air_pressure).write(simulation_cell_width).write(simulation_fluid_density)
-        .write(glm::uvec2(256, 256)).write(particle_init_cube_resolution).write(particle_init_cube_offset).write(particle_init_cube_size)
+        .write(glm::uvec2(particle_dispatch_size.x * particle_local_group_size, particle_dispatch_size.y)).write(particle_init_cube_resolution).write(particle_init_cube_resolution.volume()).write(particle_init_cube_offset).write(particle_init_cube_size)
         .write(simulation_gravity)
         .write(simulation_diffusion_coefficient)
         .write(surface_render_resolution).write(surface_render_size.volume())
@@ -250,7 +257,11 @@ int main(){
         .write(simulation_float_density_diffuse_coefficient)
         .write(particle_render_color).write(particle_render_size)
         .write(render_light_direction).write(render_surface_ambient_color).write(render_surface_diffuse_color)
-        .write(fluid_surface_render_size);
+        .write(fluid_surface_render_size)
+        .write(active_particle_w)
+        .write(fountain_position).write(fountain_force)
+        .write(solid_repel_velocity)
+        .write(particle_render_max_size);
 
     //create the buffer that will hold all simulation parameters
     Buffer simulation_parameters_buffer = BufferInfo(fluid_params_uniform_buffer, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT).create();
@@ -323,7 +334,7 @@ int main(){
                     FlowStorageBuffer{"particles", PARTICLES_BUF, usage_compute, BufferState{BUFFER_STORAGE_W}},
                 }
             },
-            Size3{1,particle_space_size / particle_local_group_size, 1}
+            particle_dispatch_size
         )
     };
 
@@ -456,11 +467,10 @@ int main(){
             fluid_dispatch_size
         ),
         new FlowComputeSection(
-            fluid_context, "12_prepare_pressure",
+            fluid_context, "12_compute_divergence",
             FlowPipelineSectionDescriptors{
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
-                    FlowStorageImage{"cell_types", CELL_TYPES,   usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"velocities", VELOCITIES_1, usage_compute, ImageState{IMAGE_STORAGE_R}},
                     FlowStorageImage{"divergences",DIVERGENCES,  usage_compute, ImageState{IMAGE_STORAGE_W}}
                 }

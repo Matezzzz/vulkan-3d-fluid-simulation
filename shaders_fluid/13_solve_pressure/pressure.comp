@@ -1,12 +1,19 @@
 #version 450
 
+
+/**
+ * pressure.comp
+ *  - This shader solves for pressure using the Jacobi iterative method.
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 24) int cell_type_water;
-    layout(offset = 28) int cell_type_solid;
-    layout(offset = 32) float time_delta;
-    layout(offset = 36) float pressure_air;
+    layout(offset = 24) uint cell_type_water;   //uint representing water in cell_types
+    layout(offset = 28) uint cell_type_solid;   //uint representing solid cells in cell_Types
+    layout(offset = 32) float time_delta;       //simulation time step
+    layout(offset = 36) float pressure_air;     //pressure of air cells
     layout(offset = 40) float cell_width;
     layout(offset = 44) float fluid_density;
 };
@@ -18,41 +25,49 @@ layout(set = 0, binding = 4, r32f) uniform restrict image3D pressures_2;
 
 
 
-
+//if iteration is even, pressures_1 is used for reading and pressures_2 for writing, or vice-versa when iteration is odd
 layout(push_constant) uniform constants{
     uint is_even_iteration;
 };
 
 
+//glsl does not support passing images as parameters to functions. Due to this, there has to be the exact same code written twice, once for reading from pressures_1 and writing to pressures_2, and once the other way around.
+//I use defines to avoid writing the same code twice, however, this makes the code a bit more messy
 
-#define search_neighbor(tex_in, move)\
-t = imageLoad(cell_types, i + move).x;\
+//This is a direct implementation of jacobi iterative method as described on wikipedia here https://en.wikipedia.org/wiki/Jacobi_method
+//The equations that are being solved are described in the article 'Fluid flow for the rest of us', on which the simulation is based.
+//All comments will refer to the last equation in the description section of the wikipedia article : x^{(k+1)} = \frac{1}{A_{ii}} \cdot (b_i - \sum_{j \neq i} (a_{ij} \cdot x_j^{(k)}))) (In LaTeX), where k represents current iteration.
+
+#define search_neighbor(tex_in, move)           /*used to go through all neighboring cells and act according to their type*/\
+t = imageLoad(cell_types, i + move).x;          /*read neighboring cell type*/\
 if (t != cell_type_solid){\
     if (t == cell_type_water){\
-        s -= imageLoad(tex_in, i + move).x;\
+        s -= imageLoad(tex_in, i + move).x;     /*if cell is water, add its' previous computed pressure to sum*/\
     }else{\
-        s -= pressure_air;\
+        s -= pressure_air;                      /*if cell is air, its' pressure is always the same, just add it to the sum*/\
     }\
     aii++;\
 }
 
 #define computePressure(tex_in, tex_out)\
-int aii = 0;\
-float s = imageLoad(divergences, i).x * fluid_density * cell_width / time_delta;\
-uint t;\
-search_neighbor(tex_in, ivec3(1, 0, 0))\
+int aii = 0;                                        /*total number of non-solid neighbours (and the element of matrix at position A_ii)*/\
+float s = imageLoad(divergences, i).x * fluid_density * cell_width / time_delta;   /*computes b_i from equation*/\
+uint t;                                             /*used to store current cell type*/\
+search_neighbor(tex_in, ivec3(1, 0, 0))             /*6 lines used to compute \sum_{j \neq i} (a_{ij} \cdot x_j^{(k)}) and A_{ii} at the same time*/\
 search_neighbor(tex_in, ivec3(0, 1, 0))\
 search_neighbor(tex_in, ivec3(0, 0, 1))\
 search_neighbor(tex_in, ivec3(-1, 0, 0))\
 search_neighbor(tex_in, ivec3(0, -1, 0))\
 search_neighbor(tex_in, ivec3(0, 0, -1))\
-imageStore(tex_out, i, vec4(-s / aii, 0, 0, 0));
+imageStore(tex_out, i, vec4(-s / aii, 0, 0, 0));    /*save computed value*/
 
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     uint t = imageLoad(cell_types, i).x;
+    //if current cell is water
     if (t == cell_type_water){
+        //select right code based on which texture is the source and which is the target
         if (is_even_iteration == 1){
             computePressure(pressures_1, pressures_2)
         }else{

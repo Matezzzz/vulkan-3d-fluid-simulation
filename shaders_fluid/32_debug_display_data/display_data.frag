@@ -1,5 +1,11 @@
 #version 450
 
+/**
+ * display_data.frag
+ *  - Fragment shader for display data. just sets point color to the one defined in display_data.vert
+ */
+
+
 layout(location = 0) in vec3 color;
 
 

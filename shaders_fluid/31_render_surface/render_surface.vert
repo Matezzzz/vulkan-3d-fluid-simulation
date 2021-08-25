@@ -1,5 +1,10 @@
 #version 450
 
+/**
+ * render_surface.vert
+ *  - Vertex shader used for rendering fluid surface. Converts vertex ID to cell position in the grid.
+ */
+
 
 layout(location = 0) out ivec3 out_pos;
 
@@ -14,5 +19,6 @@ ivec3 getPos(int vertex_i){
 }
 
 void main(){
+    //compute cell position from gl_VertexIndex
     out_pos = getPos(gl_VertexIndex);
 }

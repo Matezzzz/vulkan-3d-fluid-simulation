@@ -1,51 +1,54 @@
 #version 450
 
+/**
+ * forces.comp
+ *  - This shader is responsible for adding forces to fluid cells. Currrently, this includes gravity and fountain forces.
+ */
+
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 0) uvec3 fluid_size;
-    layout(offset = 24) int cell_type_water;
-    layout(offset = 32) float time_delta;
-    layout(offset = 108) float gravity;
+    layout(offset = 0) uvec3 fluid_size;        //fluid grid size
+    layout(offset = 24) int cell_type_water;    //uint representing water cells in cell_types
+    layout(offset = 32) float time_delta;       //simulation time step
+    layout(offset = 108) float gravity;         //how strong is the force of gravity
+    layout(offset = 240) uvec3 fountain_position; //fountain base coordinates
+    layout(offset = 252) float fountain_force;  //fountain force
 };
 layout(set = 0, binding = 1, r8ui)     uniform restrict readonly uimage3D cell_types;
 layout(set = 0, binding = 2, rgba32f) uniform restrict image3D velocities;
 
 
-
+//return cell type at given coordinates
 uint cellAt(ivec3 i){
     return imageLoad(cell_types, i).x;
 }
-
-bool isActive(uint type){
+bool isWater(uint type){
     return (type == cell_type_water);
 }
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
-
+    //sum of all forces acting on this cell
     vec3 force = vec3(0, 0, 0);
 
+    //if current cell or the one across the Y border is water, add the force of gravity
     if (i.y != 0){
         uint type1 = cellAt(i);
         uint type2 = cellAt(i - ivec3(0, 1, 0));
-        if (isActive(type1) || isActive(type2)){
+        if (isWater(type1) || isWater(type2)){
             force.y += gravity;
         }
     }
-    if (i.x == fluid_size.x / 2 && i.y == fluid_size.y - 2 && i.z == fluid_size.z / 2 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.y -= 3000;
+    //if current cell or the one across Y border is active, and current cell is the one with the fountain base, add fountain force 
+    if (i == fountain_position && (isWater(cellAt(i)) || isWater(cellAt(i - ivec3(0,1,0))))){
+        force.y += fountain_force;
     }
-    /*if (i.x == 15 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.y -= 4000;
-    }
-    if (i.x == 5 && i.y == 18 && i.z == 15 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.y -= 4000;
-    }
-    if (i.x == 5 && i.y == 18 && i.z == 5 && (isActive(cellAt(i)) || isActive(cellAt(i - ivec3(0,1,0))))){
-        force.y -= 4000;
-    }*/
+
+    //if total force isn't zero, add it to velocities in texture
     if (force.x != 0 || force.y != 0 || force.z != 0){
         imageStore(velocities, i, imageLoad(velocities, i) + vec4(time_delta*force, 0));
     }

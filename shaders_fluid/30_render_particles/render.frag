@@ -1,5 +1,11 @@
 #version 450
 
+/**
+ * render.frag
+ *  - Fragment shader for rendering particles. Renders points as circles.
+ */
+
+//if not zero, particle should be discarded
 layout(location = 0) in float should_discard;
 
 
@@ -12,9 +18,10 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
 
 
 void main(){
+    //if particle should be discarded or distance from point center is larger than 0.5 (fragment would be outside of circle), discard it
     if (should_discard != 0.0 || distance(gl_PointCoord, vec2(0.5, 0.5)) > 0.5){
         discard;
-    }else{
+    }else{  //else set output color to particle_color
         o_color = particle_color;
     }
 }

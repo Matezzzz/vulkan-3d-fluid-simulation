@@ -1,12 +1,17 @@
 #version 450
 
+/**
+ * diffuse.comp
+ *  - This shader is responsible for diffusing velocities
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 24) int cell_type_water;
-    layout(offset = 32) float time_delta;
-    layout(offset = 108) float gravity;
-    layout(offset = 112) float diffuse_a;
+    layout(offset = 24) uint cell_type_water;   //uint representing water in cell_types 
+    layout(offset = 32) float time_delta;       //simulation time step
+    layout(offset = 112) float diffuse_a;       //diffuse coefficient (~per second)
 };
 layout(set = 0, binding = 1, r8ui)    uniform restrict readonly uimage3D cell_types;
 layout(set = 0, binding = 2, rgba32f) uniform restrict readonly  image3D velocities_src;
@@ -14,15 +19,29 @@ layout(set = 0, binding = 3, rgba32f) uniform restrict writeonly image3D velocit
 
 
 
+
+uint cellAt(ivec3 pos){
+    return imageLoad(cell_types, pos).x;
+}
+bool isWater(uint c){
+    return c == cell_type_water;
+}
+
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
+    //load current velocity
     vec3 velocity = imageLoad(velocities_src, i).xyz;
-    if (imageLoad(cell_types, i).x == cell_type_water){
+    //if current cell is water
+    if (isWater(cellAt(i))){
+        //compute current diffuse coefficient from time step and diffuse coefficient per second
         float diffuse_a_now = diffuse_a * time_delta;
+        //average current cell velocity with the one from surrouding cells (perform diffusion)
         vec3 velocity = ( 1.0 - 6 * diffuse_a_now) * velocity + diffuse_a_now *
             (imageLoad(velocities_src, i + ivec3(1, 0, 0)).xyz + imageLoad(velocities_src, i + ivec3(-1, 0, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 1, 0)).xyz + imageLoad(velocities_src, i + ivec3(0, -1, 0)).xyz + 
              imageLoad(velocities_src, i + ivec3(0, 0, 1)).xyz + imageLoad(velocities_src, i + ivec3(0, 0, -1)).xyz);
     }
+    //save computed velocity
     imageStore(velocities_dst, i, vec4(velocity, 0.0));
 }

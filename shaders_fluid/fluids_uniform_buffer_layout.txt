@@ -4,10 +4,10 @@
 layout(offset = 0) uvec3 fluid_size;
 layout(offset = 12) uint fluid_volume;
 
-layout(offset = 16) int cell_type_inactive;
-layout(offset = 20) int cell_type_air;
-layout(offset = 24) int cell_type_water;
-layout(offset = 28) int cell_type_solid;
+layout(offset = 16) uint cell_type_inactive;
+layout(offset = 20) uint cell_type_air;
+layout(offset = 24) uint cell_type_water;
+layout(offset = 28) uint cell_type_solid;
 
 layout(offset = 32) float time_delta;
 layout(offset = 36) float pressure_air;
@@ -16,6 +16,7 @@ layout(offset = 44) float fluid_density;
 
 layout(offset = 48) uvec2 particle_compute_size;
 layout(offset = 64) uvec3 particle_spawn_cube_resolution;
+layout(offset = 76) uint particle_spawn_cube_volume;
 layout(offset = 80) vec3 particle_spawn_cube_offset;
 layout(offset = 96) vec3 particle_spawn_cube_size;
 
@@ -44,3 +45,12 @@ layout(offset = 192) vec3 ambient_color;
 layout(offset = 208) vec3 diffuse_color;
 
 layout(offset = 224) uvec3 fluid_surface_render_size;
+
+layout(offset = 236) float active_particle_w;
+
+layout(offset = 240) uvec3 fountain_position; 
+layout(offset = 252) float fountain_force;
+
+layout(offset = 256) float solid_repel_velocity;
+
+layout(offset = 260) float particle_max_size;

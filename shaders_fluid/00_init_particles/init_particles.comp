@@ -1,29 +1,50 @@
 #version 450
 
-layout(local_size_x = 1000) in;
+/**
+ * init_particles.comp
+ *  - This shader is responsible for creating a particle cube during initialization
+ */
 
+
+layout(local_size_x = 1000) in;
 
 const int PARTICLE_BUFFER_SIZE = 1000000;
 
+
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 48) uvec2 particle_compute_size;
-    layout(offset = 64) uvec3 particle_spawn_cube_resolution;
-    layout(offset = 80) vec3 particle_spawn_cube_offset;
-    layout(offset = 96) vec3 particle_spawn_cube_size;
+    layout(offset = 48) uvec2 particle_compute_size;            //compute size (global * local)
+    layout(offset = 64) uvec3 particle_spawn_cube_resolution;   //resolution of created particle cube - how many particles in each dimension
+    layout(offset = 76) uint particle_spawn_cube_volume;        //volume of particle cube (how many particles are spawned by all invocations)
+    layout(offset = 80) vec3 particle_spawn_cube_offset;        //particle cube position
+    layout(offset = 96) vec3 particle_spawn_cube_size;          //particle cube dimensions
+    layout(offset = 236) float active_particle_w;               //particle W coordinate is set to this value when particle is active
 };
 layout(set = 0, binding = 1) buffer restrict writeonly particles{
     vec4 positions[PARTICLE_BUFFER_SIZE];
 };
 
-ivec3 getPos(uint particle_i){
-    return ivec3(particle_i % particle_spawn_cube_resolution.x, particle_i % (particle_spawn_cube_resolution.x * particle_spawn_cube_resolution.y) / particle_spawn_cube_resolution.x, particle_i / particle_spawn_cube_resolution.x / particle_spawn_cube_resolution.y);
+//convert shader invocation ID to a position inside particle cube
+uvec3 getPos(uint particle_i){
+    uint x = particle_i % particle_spawn_cube_resolution.x;
+    particle_i /= particle_spawn_cube_resolution.x;
+    uint y = particle_i % particle_spawn_cube_resolution.y;
+    particle_i /= particle_spawn_cube_resolution.y;
+    uint z = particle_i % particle_spawn_cube_resolution.z;
+    return uvec3(x, y, z);
 }
 
 void main(){
     uint i = gl_GlobalInvocationID.x + particle_compute_size.x*gl_GlobalInvocationID.y;
-    vec3 particle_pos_in_cube = getPos(i);
-    if (particle_pos_in_cube.z < particle_spawn_cube_size.z){
-        vec3 particle_pos = particle_spawn_cube_offset + particle_pos_in_cube / particle_spawn_cube_resolution * particle_spawn_cube_size;
-        positions[i] = vec4(particle_pos, 1.0);
+    //if particle would be outside of cube, discard it
+    if (i < particle_spawn_cube_volume){
+        //compute indices in each dimension of particle inside the cube
+        uvec3 particle_pos_in_cube = getPos(i);
+        //compute particle position
+        vec3 particle_pos = particle_spawn_cube_offset + 1.0 * particle_pos_in_cube / particle_spawn_cube_resolution * particle_spawn_cube_size;
+        //set position - w coordinate is set to active_particle_w to indicate that the particle is active
+        positions[i] = vec4(particle_pos, active_particle_w);
+    }else{
+        //if particle is outside of cube, set all coordinates to 0 - W is 0, this particle will be inactive and will not be used during the simulation
+        positions[i] = vec4(0, 0, 0, 0);
     }
 }

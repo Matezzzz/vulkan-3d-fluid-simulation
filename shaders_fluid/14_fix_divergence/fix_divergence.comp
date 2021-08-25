@@ -1,13 +1,19 @@
 #version 450
 
+/**
+ * fix_divergence.comp
+ *  - Use pressures computed during the previous step to modify velocities in such a way that divergence in all fluid fields will be 0
+ */
+
+
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
 
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 24) int cell_type_water;
-    layout(offset = 28) int cell_type_solid;
-    layout(offset = 32) float time_delta;
+    layout(offset = 24) uint cell_type_water;   //uint representing water in cell_types
+    layout(offset = 28) uint cell_type_solid;   //uint representing solid cells in cell_types
+    layout(offset = 32) float time_delta;       //simulation time step
     layout(offset = 40) float cell_width;
     layout(offset = 44) float fluid_density;
 };
@@ -32,39 +38,35 @@ bool isSolid(uint a){
 }
 
 
+float computeVelocityChange(ivec3 pos, uint local_type, float local_pressure, int comp_i){
+    //compute position across velocity border
+    pos[comp_i] -= 1;
+    uint cur_type = cellAt(pos);
+    //if the position isn't outside of the grid and at least one of the cells between which the velocity is is water
+    if (pos[comp_i] != -1 && (isWater(local_type) || isWater(cur_type))){
+        //if both cells aren't solid
+        if (!isSolid(local_type) && !isSolid(cur_type)){
+            //modify velocities according to pressure difference
+            return local_pressure - pressureAt(pos);
+        }
+    }
+    //return 0 by default
+    return 0;
+}
+
+
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID);
 
-    vec3 v = imageLoad(velocities, i).xyz;
-    vec3 dv = vec3(0, 0, 0);
-
+    //find out local cell type and pressure
     uint local_type = cellAt(i);
     float local_pressure = imageLoad(pressures, i).x;
 
-    ivec3 cur_i;
-    uint cur_type;
-
-    cur_i = i - ivec3(1, 0, 0);
-    cur_type = cellAt(cur_i);
-    if (i.x != 0 && (isWater(local_type) || isWater(cur_type))){
-        if (!isSolid(local_type) && !isSolid(cur_type)){
-            dv.x = local_pressure - pressureAt(cur_i);
-        }
+    //compute velocity change in each direction
+    vec3 dv = vec3(0, 0, 0);
+    for (int j = 0; j < 3; j++){
+        dv[j] = computeVelocityChange(i, local_type, local_pressure, j);
     }
-    cur_i = i - ivec3(0, 1, 0);
-    cur_type = cellAt(cur_i);
-    if (i.y != 0 && (isWater(local_type) || isWater(cur_type))){
-        if (!isSolid(local_type) && !isSolid(cur_type)){
-            dv.y = local_pressure - pressureAt(cur_i);
-        }
-    }
-    cur_i = i - ivec3(0, 0, 1);
-    cur_type = cellAt(cur_i);
-    if (i.z != 0 && (isWater(local_type) || isWater(cur_type))){
-        if (!isSolid(local_type) && !isSolid(cur_type)){
-            dv.z = local_pressure - pressureAt(cur_i);
-        }
-    }
-    dv = time_delta / fluid_density / cell_width * dv;
-    imageStore(velocities, i, vec4(v - dv, 0.0));
+    //compute how velocity change affects current velocity, then subtract it, then save it into the velocities texture
+    imageStore(velocities, i, vec4(imageLoad(velocities, i).xyz - time_delta / fluid_density / cell_width * dv, 0.0));
 }

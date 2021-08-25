@@ -1,5 +1,13 @@
 #version 450
 
+
+/**
+ * update_densities.comp
+ *  - This shader is responsible for computing how many particles are present in each cell of the grid
+ *  - It goes through all particles, and for each one, it adds one to the cell it is in
+ */
+
+
 layout(local_size_x = 1000) in;
 
 
@@ -7,7 +15,8 @@ const int PARTICLE_BUFFER_SIZE = 1000000;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
-    layout(offset = 0) uvec3 fluid_size;
+    layout(offset = 0) uvec3 fluid_size;            //fluid grid size
+    layout(offset = 236) float active_particle_w;   //particle W has this value if the particle partakes in the simulation
 };
 layout(set = 0, binding = 1) buffer restrict readonly particles{
     vec4 particle_positions[PARTICLE_BUFFER_SIZE];
@@ -17,11 +26,12 @@ layout(set = 0, binding = 2, r32ui) uniform restrict coherent uimage3D particle_
 
 
 
-
 void main(){
-    uint i = gl_GlobalInvocationID.x;
-    vec4 pos = particle_positions[i];
-    if (pos.w == 1.0){
+    //get current particle position
+    vec4 pos = particle_positions[gl_GlobalInvocationID.x];
+    //if particle is active
+    if (pos.w == active_particle_w){
+        //add 1 to the density of cell the particle is in
         imageAtomicAdd(particle_densities, ivec3(pos.xyz), 1);
     }
 }
