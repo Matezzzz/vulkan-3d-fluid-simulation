@@ -6,3 +6,4 @@ A 3D fluid simulation on the GPU based on the article 'Fluid flow for the rest o
 
 Position of fluid is tracked using particles. These move according to fluid velocity, all fields in which particles are present are deemed to be filled with fluid.
 Solid blocks are present on all domain edges.
+Requires vulkan, GLM, ...
