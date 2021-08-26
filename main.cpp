@@ -7,7 +7,6 @@
 #include <glm/glm.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "simulation_constants.h"
 #include "fluid_flow_sections.h"
 
 
@@ -65,27 +64,19 @@ int main(){
     ExtImage depth_test_image = ImageInfo(screen_width, screen_height, VK_FORMAT_D16_UNORM, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT).create();
     ImageMemoryObject depth_image_memory{{depth_test_image}, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
-    
-
     //data for uniform buffer containing all simulation parameters. Buffer layout is described in shaders_fluid/fluids_uniform_buffer_layout.txt
     SimulationParametersBufferData fluid_params_uniform_buffer;
 
-
-
     //Initialize shader context - Load all shaders
     DirectoryPipelinesContext fluid_context("shaders_fluid");
-
     
     SimulationDescriptors flow_context{fluid_params_uniform_buffer, device_local_buffer_creator};
-
     
     //List of sections that will be executed before simulation start
     SimulationInitializationSections init_sections{fluid_context, flow_context};
 
     //All sections that will run each simulation step
     SimulationStepSections draw_section_list{fluid_context, flow_context, flow_context.getVelocitiesSampler()};
-
-
 
     // * Create a render pass - all graphics shaders must be executed inside one, this render pass uses previously created depth image and images that can be displayed into the app window*
     VkRenderPass render_pass = SimpleRenderPassInfo{swapchain.getFormat(), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, depth_test_image.getFormat(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}.create();

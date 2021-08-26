@@ -2,6 +2,10 @@
 #include "marching_cubes.h"
 #include "simulation_constants.h"
 
+
+
+
+
 //Enum of all images that are used during the simulation
 enum ImageAttachments{
     VELOCITIES_1, VELOCITIES_2, CELL_TYPES, NEW_CELL_TYPES, PRESSURES_1, PRESSURES_2, DIVERGENCES, PARTICLE_DENSITIES_IMG, DETAILED_DENSITIES_IMG, DETAILED_DENSITIES_INERTIA_IMG, PARTICLE_DENSITIES_FLOAT_1, PARTICLE_DENSITIES_FLOAT_2, IMAGE_COUNT
@@ -162,7 +166,7 @@ public:
             new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
             new FlowClearColorSection(flow_context, PARTICLE_DENSITIES_IMG, ClearValue((uint32_t) 0)),
             new FlowComputeSection(
-                fluid_context, "02_update_densities",
+                fluid_context, "01_update_densities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -174,7 +178,7 @@ public:
                 particle_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "03_update_water",
+                fluid_context, "02_update_water",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -186,7 +190,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "04_update_air",
+                fluid_context, "03_update_air",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -197,7 +201,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "05_compute_extrapolated_velocities",
+                fluid_context, "04_compute_extrapolated_velocities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -210,7 +214,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "06_set_extrapolated_velocities",
+                fluid_context, "05_set_extrapolated_velocities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -224,7 +228,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "07_update_cell_types",
+                fluid_context, "06_update_cell_types",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -235,7 +239,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "08_advect",
+                fluid_context, "07_advect",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -248,7 +252,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "09_forces",
+                fluid_context, "08_forces",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -260,7 +264,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "10_diffuse",
+                fluid_context, "09_diffuse",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -273,7 +277,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "11_solids",
+                fluid_context, "10_solids",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -285,7 +289,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "12_compute_divergence",
+                fluid_context, "11_compute_divergence",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -298,7 +302,7 @@ public:
             new FlowClearColorSection(flow_context, PRESSURES_1, ClearValue(simulation_air_pressure)),
             new FlowClearColorSection(flow_context, PRESSURES_2, ClearValue(simulation_air_pressure)),
             new FlowLoopPushConstantSection<FlowComputePushConstantSection>(divergence_solve_iterations, flow_context,
-                fluid_context, "13_solve_pressure",
+                fluid_context, "12_solve_pressure",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -312,7 +316,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "14_fix_divergence",
+                fluid_context, "13_fix_divergence",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -325,7 +329,7 @@ public:
                 fluid_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "15_particles",
+                fluid_context, "14_particles",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -338,7 +342,7 @@ public:
             ),
             new FlowClearColorSection(flow_context, DETAILED_DENSITIES_IMG, ClearValue(0u)),
             new FlowComputeSection(
-                fluid_context, "17_update_detailed_densities",
+                fluid_context, "15_update_detailed_densities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -350,7 +354,7 @@ public:
                 particle_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "18_compute_detailed_densities_inertia",
+                fluid_context, "16_compute_detailed_densities_inertia",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -362,7 +366,7 @@ public:
                 surface_render_dispatch_size
             ),
             new FlowComputeSection(
-                fluid_context, "19_compute_float_densities",
+                fluid_context, "17_compute_float_densities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
@@ -374,7 +378,7 @@ public:
                 surface_render_dispatch_size
             ),
             new FlowLoopPushConstantSection<FlowComputePushConstantSection>(float_density_diffuse_steps, flow_context,
-                fluid_context, "20_diffuse_float_densities",
+                fluid_context, "18_diffuse_float_densities",
                 FlowPipelineSectionDescriptors{
                     flow_context,
                     vector<FlowPipelineSectionDescriptorUsage>{
