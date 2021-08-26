@@ -99,10 +99,10 @@ public:
 };
 
 
-//descriptors created with this stage will be used only during compute shader
-VkPipelineStageFlags usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-//simulation params buffer is used many times with the same parameters, create a variable for it
-FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_buffer", SIMULATION_PARAMS_BUF, usage_compute, BufferState{BUFFER_UNIFORM}};
+
+
+
+
 
 
 
@@ -120,6 +120,12 @@ FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_
  * - The following list, although long, only specifies the order of sections, and what images/buffers are used. 
  */
 
+
+//the following two constants are used often for initializing flow sections
+//descriptors created with this stage will be used only during compute shader
+const VkPipelineStageFlags usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+//simulation params buffer is used many times with the same parameters, create a variable for it
+const FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_buffer", SIMULATION_PARAMS_BUF, usage_compute, BufferState{BUFFER_UNIFORM}};
 
 
 class SimulationInitializationSections : public FlowSectionList{
@@ -385,7 +391,10 @@ public:
 };
 
 
-
+/**
+ * RenderParticlesSection
+ *  - This section renders all particles in the simulation 
+ */
 class RenderParticlesSection : public FlowGraphicsPushConstantSection{
 public:
     RenderParticlesSection(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context, const PipelineInfo& render_pipeline_info, VkRenderPass render_pass) :
@@ -404,6 +413,10 @@ public:
 };
 
 
+/**
+ * RenderParticlesSection
+ *  - This section renders the fluid surface
+ */
 class RenderSurfaceSection : public FlowGraphicsPushConstantSection{
 public:
     RenderSurfaceSection(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context, const PipelineInfo& render_pipeline_info, VkRenderPass render_pass) :
@@ -424,3 +437,69 @@ public:
 };
 
 
+/**
+ * RenderDataSection
+ *  - This section can be used to display data on a grid. It is disabled by default, it was used for debugging
+ */
+class RenderDataSection : public FlowGraphicsPushConstantSection{
+public:
+    RenderDataSection(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context, const PipelineInfo& render_pipeline_info, VkRenderPass render_pass) :
+        FlowGraphicsPushConstantSection(
+            fluid_context, "32_debug_display_data",
+            FlowPipelineSectionDescriptors{
+                flow_context,
+                vector<FlowPipelineSectionDescriptorUsage>{
+                    FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, BufferState{BUFFER_UNIFORM}),
+                    FlowStorageImage{"particle_densities", DETAILED_DENSITIES_IMG, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, ImageState{IMAGE_STORAGE_R}}
+                }
+            },
+            fluid_size.volume(), render_pipeline_info, render_pass
+        )
+    {}
+};
+
+
+
+/**
+ * RenderSections
+ *  - Contains three subsections, one for rendering particles, other for surface, third for data. They can be toggled on / off in real time using flags particles_on, surface_on and data_on
+ */
+class RenderSections{
+    RenderParticlesSection m_particles;
+    RenderSurfaceSection m_surface;
+    RenderDataSection m_data;
+public:
+    bool particles_on = true;
+    bool surface_on = true;
+    bool data_on = false;
+
+    RenderSections(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context, const PipelineInfo& render_pipeline_info, VkRenderPass render_pass) :
+        m_particles (fluid_context, flow_context, render_pipeline_info, render_pass),
+        m_surface   (fluid_context, flow_context, render_pipeline_info, render_pass),
+        m_data      (fluid_context, flow_context, render_pipeline_info, render_pass)
+    {}
+    void complete(){
+        m_particles.complete();
+        m_surface.complete();
+        m_data.complete();
+    }
+    void transition(CommandBuffer& command_buffer, FlowDescriptorContext& flow_context){
+        if (particles_on) m_particles.transition(command_buffer, flow_context);
+        if (surface_on)   m_surface.  transition(command_buffer, flow_context);
+        if (data_on)      m_data.     transition(command_buffer, flow_context);
+    }
+    void execute(CommandBuffer& command_buffer, const glm::mat4& MVP){
+        if (particles_on){
+            m_particles.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+            m_particles.execute(command_buffer);
+        }
+        if (surface_on){
+            m_surface.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+            m_surface.execute(command_buffer);
+        }
+        if (data_on){
+            m_data.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
+            m_data.execute(command_buffer);
+        }
+    }
+};

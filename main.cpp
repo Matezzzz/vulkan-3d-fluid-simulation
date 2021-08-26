@@ -101,26 +101,9 @@ int main(){
     //enable depth testing
     render_pipeline_info.getDepthStencilInfo().enableDepthTest().enableDepthWrite();
 
-    //section used for rendering particles
-    RenderParticlesSection render_particles_section(fluid_context, flow_context, render_pipeline_info, render_pass);
-    //section used for rendering surface
-    RenderSurfaceSection render_surface_section(fluid_context, flow_context, render_pipeline_info, render_pass); 
-    //section that can be used to display contents of 3D textures, used for debugging
-    /*auto display_data_section = new FlowGraphicsPushConstantSection(
-        fluid_context, "32_debug_display_data",
-        FlowPipelineSectionDescriptors{
-            flow_context,
-            vector<FlowPipelineSectionDescriptorUsage>{
-                FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_UNIFORM}),
-                FlowStorageBuffer{"particle_densities", PARTICLE_DENSITIES_BUF, DescriptorUsageStage(VK_PIPELINE_STAGE_VERTEX_SHADER_BIT), BufferState{BUFFER_STORAGE_R}}
-            }
-        },
-        fluid_size.volume(), render_pipeline_info, render_pass
-    );
+    //sections used for rendering particles, surface and data(disabled by default)
+    RenderSections render_sections(fluid_context, flow_context, render_pipeline_info, render_pass);
     
-
-    SectionList render_section_list(render_section, display_data_section, render_surface_section);
-    */
 
     //when all sections were created, each one recorded which descriptors it needed to function, now all descriptors can be allocated from a shared descriptor set
     fluid_context.createDescriptorPool();
@@ -128,8 +111,7 @@ int main(){
     //Complete all sections - this is needed to update all descriptors
     init_sections.complete();   
     draw_section_list.complete();
-    render_particles_section.complete();
-    render_surface_section.complete();
+    render_sections.complete();
 
     //record command buffer responsible for initializing the simulation
     CommandBuffer init_buffer{init_command_pool.allocateBuffer()};
@@ -189,6 +171,8 @@ int main(){
         //if Q or E keys are pressed, pause/resume the simulation
         if (window.keyOn(GLFW_KEY_Q)) paused = true;
         if (window.keyOn(GLFW_KEY_E)) paused = false;
+        if (window.keyOn(GLFW_KEY_R)) render_sections.surface_on = false;
+        if (window.keyOn(GLFW_KEY_F)) render_sections.surface_on = true;
 
         //if simulation isn't paused
         if (!paused){
@@ -211,26 +195,15 @@ int main(){
         render_command_buffer.cmdBarrier(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             swapchain_image.createMemoryBarrier(ImageState{IMAGE_NEWLY_CREATED}, ImageState{IMAGE_COLOR_ATTACHMENT})
         );
-        //transition all images to be ready for rendering. Normally, this is a part of command_buffer.record call, however, that is not possible during a render pass
+        //transition all images to be ready for rendering. Normally, this is a part of command_buffer.record call, however, transitions are not possible during a render pass
         // -> .record is split into two parts, transition() and execute()
-        render_particles_section.transition(render_command_buffer, flow_context);
-        //display_data_section->transition(render_command_buffer, flow_context);
-        render_surface_section.transition(render_command_buffer, flow_context);
+        render_sections.transition(render_command_buffer, flow_context);
         render_command_buffer.cmdBeginRenderPass(render_pass_settings, render_pass, swapchain_image.getFramebuffer());
 
         //compute model-view-projection matrix
         MVP = projection * camera.view_matrix;
-        //push MVP to be used by particle render shader
-        render_particles_section.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
-        //execute the section that renders all particles
-        render_particles_section.execute(render_command_buffer);
-        /*display_data_section->getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
-        display_data_section->execute(render_command_buffer);*/
-
-        //push MVP to be used by surface render shader
-        render_surface_section.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
-        //execute the section that 
-        render_surface_section.execute(render_command_buffer);
+        //render particles, surface and data if enabled
+        render_sections.execute(render_command_buffer, MVP);
         render_command_buffer.cmdEndRenderPass();
         render_command_buffer.endRecord();
         
