@@ -143,10 +143,13 @@ enum class CellType{
 };
 
 
-
+/**
+ * SimulationParametersBufferData
+ *  - Holds all simulation parameters in a buffer. Buffer layout is described in shaders_fluid/fluids_uniform_buffer_layout.txt
+ */
 class SimulationParametersBufferData : public UniformBufferRawDataSTD140{
 public:
-    SimulationParametersBufferData(){
+    SimulationParametersBufferData() : UniformBufferRawDataSTD140(264) {
         writeIVec3((int32_t*) &fluid_size).write(fluid_size.volume())
         .write((uint32_t) CellType::CELL_INACTIVE).write((uint32_t) CellType::CELL_AIR).write((uint32_t) CellType::CELL_WATER).write((uint32_t) CellType::CELL_SOLID)
         .write(simulation_time_step).write(simulation_air_pressure).write(simulation_cell_width).write(simulation_fluid_density)

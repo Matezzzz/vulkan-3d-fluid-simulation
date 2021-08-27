@@ -132,6 +132,7 @@ const VkPipelineStageFlags usage_compute(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 const FlowUniformBuffer simulation_parameters_buffer_compute_usage{"simulation_params_buffer", SIMULATION_PARAMS_BUF, usage_compute, BufferState{BUFFER_UNIFORM}};
 
 
+/**** DESCRIPTIONS OF ALL SECTIONS AND THEIR PURPOSE IN THE SIMULATION IS DESCRIBED IN README.md ****/
 class SimulationInitializationSections : public FlowSectionList{
 public:
     SimulationInitializationSections(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context) :
@@ -483,11 +484,13 @@ public:
         m_data.complete();
     }
     void transition(CommandBuffer& command_buffer, FlowDescriptorContext& flow_context){
+        //for each section - if enabled, transition all descriptors to be used by it
         if (particles_on) m_particles.transition(command_buffer, flow_context);
         if (surface_on)   m_surface.  transition(command_buffer, flow_context);
         if (data_on)      m_data.     transition(command_buffer, flow_context);
     }
     void execute(CommandBuffer& command_buffer, const glm::mat4& MVP){
+        //for each section - if enabled, write MVP matrix, then render using it
         if (particles_on){
             m_particles.getPushConstantData().write("MVP", glm::value_ptr(MVP), 16);
             m_particles.execute(command_buffer);
