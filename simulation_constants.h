@@ -78,9 +78,11 @@ constexpr float particle_render_size = 10;
 constexpr float particle_render_max_size = 20;
 
 
+//position of the fountain spewing fluid upwards
 constexpr glm::uvec3 fountain_position{fluid_width / 2, fluid_height - 2, fluid_depth / 2};
-constexpr float fountain_force = -3000;
 
+constexpr float fountain_force = -3000;
+//velocity at the border of solid cells will be at least this, pointing away from the solid cell, into the fluid
 constexpr float solid_repel_velocity = 0.01;
 
 

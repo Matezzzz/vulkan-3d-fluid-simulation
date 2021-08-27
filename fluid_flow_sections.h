@@ -137,11 +137,7 @@ public:
     SimulationInitializationSections(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context) :
         FlowSectionList{flow_context,
             new FlowClearColorSection(flow_context, VELOCITIES_1, ClearValue(0.f, 0.f, 0.f, 0.f)),
-            new FlowClearColorSection(flow_context, VELOCITIES_2, ClearValue(0.f, 0.f, 0.f, 0.f)),
             new FlowClearColorSection(flow_context,   CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
-            new FlowClearColorSection(flow_context,  PRESSURES_1, ClearValue(0.f)),
-            new FlowClearColorSection(flow_context,  PRESSURES_2, ClearValue(0.f)),
-            new FlowClearColorSection(flow_context,  DIVERGENCES, ClearValue(0.f)),
             new FlowClearColorSection(flow_context,  DETAILED_DENSITIES_INERTIA_IMG, ClearValue(0)),
             new FlowComputeSection(
                 fluid_context, "00_init_particles",
@@ -163,7 +159,6 @@ class SimulationStepSections : public FlowSectionList{
 public:
     SimulationStepSections(DirectoryPipelinesContext& fluid_context, FlowDescriptorContext& flow_context, VkSampler velocities_sampler) :
         FlowSectionList{flow_context,
-            new FlowClearColorSection(flow_context, NEW_CELL_TYPES, ClearValue((uint32_t) CellType::CELL_INACTIVE)),
             new FlowClearColorSection(flow_context, PARTICLE_DENSITIES_IMG, ClearValue((uint32_t) 0)),
             new FlowComputeSection(
                 fluid_context, "01_update_densities",
@@ -454,7 +449,7 @@ public:
                 flow_context,
                 vector<FlowPipelineSectionDescriptorUsage>{
                     FlowUniformBuffer("simulation_params_buffer", SIMULATION_PARAMS_BUF, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, BufferState{BUFFER_UNIFORM}),
-                    FlowStorageImage{"particle_densities", DETAILED_DENSITIES_IMG, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, ImageState{IMAGE_STORAGE_R}}
+                    FlowStorageImage{"particle_densities", PARTICLE_DENSITIES_IMG, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, ImageState{IMAGE_STORAGE_R}}
                 }
             },
             fluid_size.volume(), render_pipeline_info, render_pass

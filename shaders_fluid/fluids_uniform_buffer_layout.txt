@@ -1,4 +1,4 @@
-# offset specifies offset in bytes according to the STD140 layout.;
+// offset specifies offset in bytes according to the STD140 GLSL layout
 
 
 layout(offset = 0) uvec3 fluid_size;
