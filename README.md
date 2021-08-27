@@ -6,7 +6,7 @@ A 3D fluid simulation on the GPU based on the article 'Fluid flow for the rest o
 ## Controls
 
 Use WASD to move the camera around, left shift to move the camera down, space to move it up.
-Q and E can be used to pause and unpause the simulation, R and F are used to enable/disable surface rendering.
+Q and E can be used to pause and resume the simulation, R and F are used to enable/disable surface rendering.
 
 
 ## Main ideas
