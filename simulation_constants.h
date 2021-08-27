@@ -14,37 +14,40 @@ constexpr uint32_t fluid_width = 20, fluid_height = 20, fluid_depth = 20;
  *  - However, when setting fluid width / height / depth, respective local group sizes must be divisors of size in each dimension (local group size (5, 5, 5) works with fluid size (20, 20, 20), but not with (21, 20, 20) (x dimension invalid))
  *  - Global dispatch size, or dispatch size in code for short, represents number of local work groups in each dimensions - for aforementioned local group size (5, 5, 5) and fluid size (20, 20, 20), dispatch size would be (20 / 5, 20 / 5, 20 / 5) = (4, 4, 4)
 */
-Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
+const Size3 fluid_size{fluid_width, fluid_height, fluid_depth};
 //local group size (must match value written in shaders)
-Size3 fluid_local_group_size{5, 5, 5};
+const Size3 fluid_local_group_size{5, 5, 5};
 //global dispatch size for fluid shaders
-Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
+const Size3 fluid_dispatch_size = fluid_size / fluid_local_group_size;
 
 
 //max amount of particles to be simulated
+//!! When modifying this variable, for the simulation to work correctly, a constant in the shaders has to be changed as well
+//!! Change 'const int PARTICLE_BUFFER_SIZE = 1000000;' to match the number specified here
+//!! shaders affected - init_particles.comp, update_densities.comp, particles.comp, update_detailed_densities.comp, render.vert
+//also, for this change to have any effect, change particle_init_cube_resolution variable below (otherwise, the same amount of particles will be spawned)
 constexpr uint32_t particle_space_size = 1000000;
 //local group size for particle shaders - particle computes are 1D - size is always (particle_local_group_size, 1, 1)
 constexpr uint32_t particle_local_group_size = 1000;
 //global dispatch size for particle shaders
-Size3 particle_dispatch_size = Size3{particle_space_size / particle_local_group_size, 1, 1};
+const Size3 particle_dispatch_size = Size3{particle_space_size / particle_local_group_size, 1, 1};
 
 //detailed resolution is used for rendering water surface - resolution defines number of subdivisions on each side of simulation cube
 constexpr uint32_t surface_render_resolution = 5;
-Size3 surface_render_size{fluid_size * surface_render_resolution};
-Size3 surface_render_local_group_size{5, 5, 5};
+const Size3 surface_render_size{fluid_size * surface_render_resolution};
+const Size3 surface_render_local_group_size{5, 5, 5};
 //global dispatch size for 
-Size3 surface_render_dispatch_size = surface_render_size / surface_render_local_group_size;
+const Size3 surface_render_dispatch_size = surface_render_size / surface_render_local_group_size;
 
 
 /**
  * Simulation parameters
  *  - These are passed to shaders using an uniform buffer, they modify behaviour of different shaders
  */
-
 //Particles are initialized as a cube, starting at given offset with given dimensions. Resolution specifies particle count for each size.
-Size3 particle_init_cube_resolution{100, 100, 100};
-glm::vec3 particle_init_cube_offset{5, 2, 1.5};
-glm::vec3 particle_init_cube_size{10, 10, 2};
+const Size3 particle_init_cube_resolution{100, 100, 100};
+const glm::vec3 particle_init_cube_offset{5, 2, 1.5};
+const glm::vec3 particle_init_cube_size{10, 10, 2};
 
 //particle w coordinate will be set to this constant when particle is active, can be any number except 0
 constexpr float active_particle_w = 1;
@@ -71,7 +74,7 @@ constexpr float simulation_diffusion_coefficient = 0.01;
 constexpr uint32_t divergence_solve_iterations = 200;
 
 //particle color used when rendering
-glm::vec3 particle_render_color{1, 0, 0};
+const glm::vec3 particle_render_color{1, 0, 0};
 //particle size - this number is divided by distance from camera, particles further away will appear smaller
 constexpr float particle_render_size = 10;
 //rendered particle size will not be larger than this number. This is done to prevent really close particles spanning large portion of the screen
