@@ -1,14 +1,17 @@
-# vulkan-3d-fluid-simulation
+# Vulkan 3D fluid simulation
 
-A 3D fluid simulation on the GPU based on the article 'Fluid flow for the rest of us', available [here](https://cg.informatik.uni-freiburg.de/intern/seminar/gridFluids_fluid_flow_for_the_rest_of_us.pdf).
+A 3D fluid simulation on the GPU based on the article 'Fluid flow for the rest of us', available [here](https://cg.informatik.uni-freiburg.de/intern/seminar/gridFluids_fluid_flow_for_the_rest_of_us.pdf). It is written in C++, using Vulkan and GLFW for graphics.
+
+
+## Controls
+
+Use WASD to move the camera around, left shift to move the camera down, space to move it up.
+Q and E can be used to pause and unpause the simulation, R and F are used to enable/disable surface rendering.
 
 
 ## Main ideas
 
 Fluid is modeled as a velocity field - fluid domain is separated into a 3D grid, and in each cell, a single velocity vector describes movement of the fluid in that point. To track where the fluid is and where is air, particles are used. These move according to the fluid velocity at their position, and all fields in which particles are present are deemed to be filled with fluid. Simulation domain is bordered by solid blocks. As opposed to the article, the simulation space has a fixed size to allow for the GPU implementation.
-
-
-
 
 
 ## Buffers / Images
@@ -37,8 +40,6 @@ The simulation uses multiple buffers / images, described in the table below:
 | Simulation parameters buffer  | R     | multiple  | Contains all simulation parameters. The layout is described in *shaders_fluid/fluids_uniform_buffer_layout.txt*. |
 
 
-
-
 ## Simulation Sections
 
 Simulation is made out of individual sections. Each section comprises of a single operation, done on all cells simultaneously and executed on the GPU. The following table describes all sections used.
@@ -53,7 +54,7 @@ Inputs describes all textures / buffers that are read by that section. Outputs d
 | Clear inertias        | -         | Inertias                  | Resets all values in inertias to zero.                |
 | 00_init_particles     | -         | Particles storage buffer  | Creates a cube made out of particles. Particle count, cube position and size are all specified by constants in simulation_constants.h |
 | **Simulation Step**
-| 01a-Clear particle densities          | -                                             | Particle densities                | Set all particle densities to zero. |
+| 01a, Clear particle densities          | -                                             | Particle densities                | Set all particle densities to zero. |
 | 01_update_densities                   | Particles storage buffer & Particle densities | Particle densities                | Compute how many particles are present in each grid cell. This is done to determine where the fluid currently is. |
 | 02_update_water                       | Particle densities                            | New cell types                    | Use densities to determine in which grid cells water is present. If density is larger than 0, cell is water, otherwise it is left inactive. Saves information about water into new cell types |
 | 03_update_air                         | New cell types                                | New cell types                    | If cell is inactive and borders water, set is as air. If cell is at the border of simulation domain, set it as solid.|
@@ -70,7 +71,7 @@ Inputs describes all textures / buffers that are read by that section. Outputs d
 | Loop over 12_solve_pressure           | Cell types & Pressures 1 & Pressures 2 & Divergences | Pressures 2 & Pressures 1  | Solve for pressure using jacobi iterative method. |
 | 13_fix_divergence                     | Velocities 1 & Cell types & Pressures 2       | Velocities 1                      | Use computed pressure to modify velocites. After this step, divergence in all fluid cells should be zero. |
 | 14_particles                          | Velocities 1 & Particles storage buffer       | Particles storage buffer          | Move all particles according to fluid velocity. |
-| 15a-Clear detailed particle densities | -                                             | Detailed particle densities       | Set all values in detailed densities to zero. |
+| 15a, Clear detailed particle densities | -                                             | Detailed particle densities       | Set all values in detailed densities to zero. |
 | 15_update_detailed_densities          | Particles storage buffer                      | Detailed particle densities       | Compute how many particles are present in each cell of the detailed grid |
 | 16_compute_detailed_densities_inertia | Detailed particle densities & Detailed densities inertias | Detailed densities inertias | Compute density inertias - increase inertia if there is a particle in this or surrounding cells, decrease it otherwise. |
 | 17_compute_float_densities            | Detailed densities inertias                   | Particle densities float 1        | Convert density inertias to float densities - -1 if inertia == 0, else k * inertia |
@@ -98,8 +99,33 @@ After these steps, surface is ready to be rendered .
 Section 31 renders the fluid using the marching cubes method described in this [article](https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-1-generating-complex-procedural-terrains-using-gpu), where float densities computed earlier act as a density function talked about in the article.
 
 
-
-
 ## Compiling
+Although all libraries are technically not platform specific, compiling on platforms other than windows has not been tested and is not supported.
+There are two makefiles, one compiles the library(*./just-a-vulkan-library/.obj/Makefile*), the other one the simulation(*./Makefile*).
+The project requires a C++17 capable compiler (for *filesystem* header and designated initializers).
+The libraries used are GLFW, GLM and obviously, vulkan. (stb_image.h is used as well, however, it doesn't require any makefile modifications).
+To succesfully compile the project, Makefiles will need to be slightly modified:
+* Add the GLFW static library path to **LDFLAGS** in library makefile and to **LINK_LIBS** in project one
+* Add GLFW and GLM header locations to CXX_FLAGS and CPP_FLAGS in each header.
+* To run the project, have *glfw3.dll* and *vulkan-1.dll* somewhere on PATH.
 
-Requires vulkan, GLM, ...
+
+## Code structure
+
+* *main.cpp* contains main loop and main application flow.
+* *simulation_constants.h* contains all simulation parameters.
+* *marching_cubes.h* contains classes that are used for creating buffers used while rendering water surface
+* *fluid_flow_sections.h* contains classes that create lists of sections used by the simulation
+* **shaders_fluid** contains all shaders that are used by the simulation. What each one does is described in the list of sections above
+* **surface_render_data** contains data for rendering surface, is loaded by marching_cubes.h
+* **just-a-vulkan-library** a library written by me, contains many classes that greatly simplify working with vulkan
+
+
+## Screenshot
+
+![Fountain](screenshots/fountain_start.png)
+
+
+## Wait, shouldn't the volume of the water be constant, if there are no particles being added?
+
+Yes. But because any cell with a particle is marked as water, when the fountain catapults the particles into the sky and scatters them around, it creates a lot of water cells that have lower particle density than the ones at the beginning. When these droplets of water fall back down, they mix with old cells as if they had the same density, hence, the average density of a cell decreases. Over time, this results in the particle density of volume decreasing, and the volume expanding. I haven't yet figured out how to fix this problem.
