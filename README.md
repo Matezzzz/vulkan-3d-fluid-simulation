@@ -14,6 +14,18 @@ Q and E can be used to pause and resume the simulation, R and F are used to enab
 Fluid is modeled as a velocity field - fluid domain is separated into a 3D grid, and in each cell, a single velocity vector describes movement of the fluid in that point. To track where the fluid is and where is air, particles are used. These move according to the fluid velocity at their position, and all fields in which particles are present are deemed to be filled with fluid. Simulation domain is bordered by solid blocks. As opposed to the article, the simulation space has a fixed size to allow for the GPU implementation.
 
 
+
+## Screenshot
+
+![Fountain](screenshots/fountain_start.png)
+
+
+## Video
+https://user-images.githubusercontent.com/24705992/139912381-d8bcbd3c-86b0-4bfc-a791-4ef61624ca2c.mp4
+
+
+
+
 ## Buffers / Images
 
 The simulation uses multiple buffers / images, described in the table below:
@@ -120,14 +132,6 @@ To succesfully compile the project, Makefiles will need to be slightly modified:
 * **surface_render_data** contains data for rendering surface, is loaded by marching_cubes.h
 * **just-a-vulkan-library** a library written by me, contains many classes that greatly simplify working with vulkan
 
-
-## Screenshot
-
-![Fountain](screenshots/fountain_start.png)
-
-
-## Video
-https://user-images.githubusercontent.com/24705992/139912022-e698e93d-ceac-4484-b30b-7a2f5515240a.mp4
 
 
 
