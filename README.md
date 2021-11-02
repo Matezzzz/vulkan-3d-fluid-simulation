@@ -126,6 +126,11 @@ To succesfully compile the project, Makefiles will need to be slightly modified:
 ![Fountain](screenshots/fountain_start.png)
 
 
+## Video
+https://user-images.githubusercontent.com/24705992/139912022-e698e93d-ceac-4484-b30b-7a2f5515240a.mp4
+
+
+
 ## Wait, shouldn't the volume of the water be constant, if there are no particles being added?
 
 Yes. But because any cell with a particle is marked as water, when the fountain catapults the particles into the sky and scatters them around, it creates a lot of water cells that have lower particle density than the ones at the beginning. When these droplets of water fall back down, they mix with old cells as if they had the same density, hence, the average density of a cell decreases. Over time, this results in the particle density of volume decreasing, and the volume expanding. I haven't yet figured out how to fix this problem.
