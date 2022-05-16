@@ -45,6 +45,18 @@ To successfully compile the project, Makefiles will need to be slightly modified
 * **just-a-vulkan-library** a library written by me, contains many classes that greatly simplify working with Vulkan.
 
 
+
+## Screenshot
+
+![Fountain](screenshots/fountain_start.png)
+
+
+## Video
+https://user-images.githubusercontent.com/24705992/139912381-d8bcbd3c-86b0-4bfc-a791-4ef61624ca2c.mp4
+
+
+
+
 ## Buffers / Images
 
 The simulation uses multiple buffers/images, described in the table below:
