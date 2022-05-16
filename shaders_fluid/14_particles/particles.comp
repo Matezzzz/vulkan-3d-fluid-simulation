@@ -13,6 +13,7 @@ const int PARTICLE_BUFFER_SIZE = 1000000;
 
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;
     layout(offset = 32) float time_delta;           //simulation time step
     layout(offset = 236) float active_particle_w;   //W component of active particles will be equal to this value
 };
@@ -25,13 +26,13 @@ layout(set = 0, binding = 2) buffer restrict particles{
 
 //functions for sampling interpolated velocities - described in more detail in 08_advect/advect.comp
 float getVelocityXAt(vec3 pos){
-    return texture(velocities, pos + vec3(0.5, 0, 0)).x;
+    return texture(velocities, (pos + vec3(0.5, 0, 0)) / fluid_size).x;
 }
 float getVelocityYAt(vec3 pos){
-    return texture(velocities, pos + vec3(0, 0.5, 0)).y;
+    return texture(velocities, (pos + vec3(0, 0.5, 0)) / fluid_size).y;
 }
 float getVelocityZAt(vec3 pos){
-    return texture(velocities, pos + vec3(0, 0, 0.5)).z;
+    return texture(velocities, (pos + vec3(0, 0, 0.5)) / fluid_size).z;
 }
 vec3 getVelocityAt(vec3 pos){
     return vec3(getVelocityXAt(pos), getVelocityYAt(pos), getVelocityZAt(pos));

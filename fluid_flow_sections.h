@@ -92,7 +92,7 @@ public:
         };
 
         //sampler used for getting velocity texture values. Includes linear interpolation, coordinates from 0 to texture size, and clamping values to edge
-        m_velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).disableNormalizedCoordinates().setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
+        m_velocities_sampler = SamplerInfo().setFilters(VK_FILTER_LINEAR, VK_FILTER_LINEAR).setWrapMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE).create();
     }
     operator FlowDescriptorContext&(){
         return m_context;
