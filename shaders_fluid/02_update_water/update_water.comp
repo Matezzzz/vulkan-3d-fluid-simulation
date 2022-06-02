@@ -24,11 +24,14 @@ void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
     int type;
     //if the amount of particles in current grid cell is not zero, set cell type to water, else set it to air
-    if (imageLoad(particle_densities, i).x > 0){
+    /*if (imageLoad(particle_densities, i).x > 0){
         type = cell_type_water;
     }else{
         type = cell_type_inactive;
-    }
+    }*/
+    //mark all cells as water for particle simulation
+    // - this will ensure that for each cell, the same amount of fluid will pour in and out, which is best for the smoke simulation to look pretty
+    type = cell_type_water;
     //store cell type determined above into the cell types texture
     imageStore(cell_types, i, uvec4(type, 0, 0, 0));
 }

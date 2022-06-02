@@ -4,6 +4,7 @@
  * densities_inertia.comp
  *  - Tries to smooth detailed densities in time. This process is described in more detail in main.cpp, where constants regarding this process are defined. Look for label 'Fluid surface rendering'
  */
+//! THIS SHADER IS DEPRECATED FOR PARTICLES, IT JUST COPIES THE VALUE FROM particle_densities TO densities_inertia
 
 
 layout(local_size_x = 5, local_size_y = 5, local_size_z = 5) in;
@@ -18,20 +19,21 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
 layout(set = 0, binding = 1, r32ui) uniform restrict readonly uimage3D particle_densities;
 layout(set = 0, binding = 2, r32ui) uniform restrict uimage3D densities_inertia;
 
-
+/*
 ivec3 moves[6] = ivec3[](ivec3(1, 0, 0), ivec3(0, 1, 0), ivec3(0, 0, 1), ivec3(-1, 0, 0), ivec3(0, -1, 0), ivec3(0, 0, -1));
 
 
 uint densityAt(ivec3 pos){
     return imageLoad(particle_densities, pos).x;
-}
+}*/
 
+//! THIS SHADER IS DEPRECATED FOR PARTICLES, IT JUST COPIES THE VALUE FROM particle_densities TO densities_inertia
 
 void main(){
     ivec3 i = ivec3(gl_GlobalInvocationID.xyz);
 
     //load old inertia
-    uint inertia = imageLoad(densities_inertia, i).x;
+    /*uint inertia = imageLoad(densities_inertia, i).x;
     uint old_inertia = inertia;
 
     //if particle density in this field is greater than 0, increase inertia
@@ -56,7 +58,8 @@ void main(){
         }else{
             inertia = 0;
         }
-    }
+    }*/
     //cap inertia at max, then store it
-    imageStore(densities_inertia, i, uvec4(min(max_inertia, inertia), 0, 0, 0));
+    //this shader was only used when rendering surface, it is deprecated for particles. Just copy the value so all other shaders work
+    imageStore(densities_inertia, i, imageLoad(particle_densities, i));// uvec4(min(max_inertia, inertia), 0, 0, 0));
 }

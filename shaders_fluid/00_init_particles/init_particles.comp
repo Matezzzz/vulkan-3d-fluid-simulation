@@ -18,9 +18,17 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 80) vec3 particle_spawn_cube_offset;        //particle cube position
     layout(offset = 96) vec3 particle_spawn_cube_size;          //particle cube dimensions
     layout(offset = 236) float active_particle_w;               //particle W coordinate is set to this value when particle is active
+    layout(offset = 272) vec3[8] init_cube_colors;              //colors of corners of starting color cube - center computed using linear interpolation
+    layout(offset = 400) float init_cube_saturation;            //how much to saturate initial colors
 };
-layout(set = 0, binding = 1) buffer restrict writeonly particles{
+layout(set = 0, binding = 1) buffer restrict writeonly particle_positions{
     vec4 positions[PARTICLE_BUFFER_SIZE];
+};
+layout(set = 0, binding = 2) buffer restrict writeonly particle_velocities{
+    vec4 velocities[PARTICLE_BUFFER_SIZE];
+};
+layout(set = 0, binding = 3) buffer restrict writeonly particle_colors{
+    vec4 colors[PARTICLE_BUFFER_SIZE];
 };
 
 //convert shader invocation ID to a position inside particle cube
@@ -33,8 +41,37 @@ uvec3 getPos(uint particle_i){
     return uvec3(x, y, z);
 }
 
+
+
+
+float sat(float mid, float k, float val){
+    return mid + (val - mid) * k;
+}
+//somehow saturate given color
+vec3 saturate(vec3 c){
+    //min and max color
+    float mn = min(min(c.x, c.y), c.z), mx = max(max(c.x, c.y), c.z);
+    float dif = mx - mn;
+    //the difference between min and max we will try to reach
+    float new_dif = 1 - pow(1 - dif, init_cube_saturation);
+    //simply - we put all three colors on the same line, compute a point, distances of all points will be scaled by a constant, so that max(r, g, b) - min(r, g, b) = new_dif after the scaling
+    float k = new_dif / dif;
+    float mid = mn * dif / (1 + mn - mx) + mn;
+    return vec3(sat(mid, k, c.x), sat(mid, k, c.y), sat(mid, k, c.z));
+}
+/* Use this color cube to have pretty sea colors instead of mostly random saturated rgb ones
+vec3 color_1 = vec3(9, 84, 90) / 255.0;
+vec3 color_2 = vec3(253, 158, 110) / 255.0;
+vec3 color_3 = vec3(168, 110, 73) / 255.0;
+vec3 color_4 = vec3(36, 107, 113) / 255.0;
+vec3[] color_cube = vec3[8](color_1, color_2, color_3, color_4, color_1, color_2, color_3, color_4);
+*/
+//vec3[] color_cube = vec3[](vec3(0.889870058188535, 0.0, 1), vec3(1, 0.0, 0.1455915988212837), vec3(0.0, 0.8074791121168801, 1), vec3(0.4895510943733825, 0.0, 1), vec3(0.0, 0.12178483166098886, 1), vec3(1, 0.8265471880527357, 0.0), vec3(1, 0.6584850247274971, 0.0), vec3(0.3138543594473049, 1, 0.0));
+
 void main(){
     uint i = gl_GlobalInvocationID.x + particle_compute_size.x*gl_GlobalInvocationID.y;
+    //particles don't move when initialized
+    velocities[i] = vec4(0, 0, 0, 0);
     //if particle would be outside of cube, discard it
     if (i < particle_spawn_cube_volume){
         //compute indices in each dimension of particle inside the cube
@@ -43,8 +80,28 @@ void main(){
         vec3 particle_pos = particle_spawn_cube_offset + 1.0 * particle_pos_in_cube / particle_spawn_cube_resolution * particle_spawn_cube_size;
         //set position - w coordinate is set to active_particle_w to indicate that the particle is active
         positions[i] = vec4(particle_pos, active_particle_w);
+        //k = between 0 and 1, defines how far from [0, 0, 0] a particle is in normalized cube coordinates
+        vec3 k = 1.0 * (particle_pos_in_cube + 0.5) / particle_spawn_cube_resolution;
+        //perform linear interpolation between 8 cube colors
+        vec3 interp = mix(
+            mix(
+                mix(init_cube_colors[0], init_cube_colors[1], k.x),
+                mix(init_cube_colors[2], init_cube_colors[3], k.x),
+                k.z),
+            mix(
+                mix(init_cube_colors[4], init_cube_colors[5], k.x),
+                mix(init_cube_colors[6], init_cube_colors[7], k.x),
+                k.z),
+            k.y);
+        //saturate the resulting color, then save it
+        colors[i] = vec4(saturate(interp), 1.0);
     }else{
         //if particle is outside of cube, set all coordinates to 0 - W is 0, this particle will be inactive and will not be used during the simulation
         positions[i] = vec4(0, 0, 0, 0);
+        colors[i] = vec4(0, 0, 0, 0);
     }
 }
+
+
+
+

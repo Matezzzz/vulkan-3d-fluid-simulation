@@ -6,7 +6,7 @@
 SOURCE_FILES = main.cpp
 LINK_DIRS = just-a-vulkan-library C:/Program Files/MSYS2/mingw64/x86_64-w64-mingw32/lib
 LINK_LIBS = JAVL glfw3dll
-CPP_FLAGS = -std=c++17 -g -static
+CPP_FLAGS = -std=c++2a -g -static
 OUT_FILENAME = fluid_sim.exe
 
 SHADER_DIR=shaders_fluid

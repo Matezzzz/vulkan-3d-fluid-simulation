@@ -1,0 +1,70 @@
+#version 450
+
+/**
+ * diffuse_particles.comp
+ *  - Move particles to cells with lower density over time
+ */
+
+
+layout(local_size_x = 1000) in;
+
+
+const int PARTICLE_BUFFER_SIZE = 1000000;
+
+
+layout(set = 0, binding = 0) uniform simulation_params_buffer{
+    layout(offset = 0) uvec3 fluid_size;            //domain size in cells
+    layout(offset = 28) uint cell_type_solid;       //uint representing solid cells in cell_types
+    layout(offset = 32) float time_delta;           //simulation time step
+    layout(offset = 116) int detailed_resolution;   //how many subdivisions does detailed resolution have per cell size
+    layout(offset = 236) float active_particle_w;   //W component of active particles will be equal to this value
+    layout(offset = 508) float particle_diffusion_strength;
+    layout(offset = 512) float particle_diffusion_acceleration_cap;
+};
+layout(set = 0, binding = 1, r8ui) uniform readonly restrict uimage3D cell_types;
+layout(set = 0, binding = 2) uniform sampler3D float_densities;
+layout(set = 0, binding = 3) buffer restrict particle_positions{
+    vec4 p_positions[PARTICLE_BUFFER_SIZE];
+};
+layout(set = 0, binding = 4) buffer restrict particle_velocities{
+    vec4 p_velocities[PARTICLE_BUFFER_SIZE];
+};
+
+
+
+bool solidAt(ivec3 pos){
+    return imageLoad(cell_types, pos).x == cell_type_solid;
+}
+float densityAt(vec3 pos){
+    return texture(float_densities, pos).x;
+}
+
+//equal to the step of 1/2 pixels in texture coordinates
+vec3 d = 1.0 / fluid_size / detailed_resolution / 2;
+
+float densityDif(vec3 p, int i){
+    //compute derivative of density with respect to coordinate i
+    vec3 a = vec3(0, 0, 0);
+    a[i] = d[i];
+    return (densityAt(p + a) - densityAt(p - a)) / 2 / d[i];
+}
+
+
+
+void main(){
+    int i = int(gl_GlobalInvocationID.x);
+    //if particle is active
+    if (p_positions[i].w == active_particle_w){
+        //get particle position in normalized coordinates
+        vec3 p = p_positions[i].xyz / fluid_size;
+        //compute diffusion acceleration - will move particles to regions with less of them (compute gradient of density, then multiply it by -1)
+        vec3 acceleration = -vec3(densityDif(p, 0), densityDif(p, 1), densityDif(p, 2));
+        
+        //clamp acceleration at a given magnitude
+        float mag = length(acceleration);
+        if (mag > particle_diffusion_acceleration_cap) acceleration = acceleration / mag * particle_diffusion_acceleration_cap;
+
+        //add acceleration * diffusion_strength force to the particle
+        p_velocities[i].xyz += acceleration * particle_diffusion_strength * time_delta;
+    }
+} 

@@ -47,7 +47,7 @@ void main(){
     //border coordinates
     ivec3 b = imageSize(cell_types) - ivec3(1, 1, 1);
     //mark all cells neighboring border of the fluid domain as solid
-    if ((i.x == 0 || i.x == b.x) || (i.y == 0 || i.y == b.y) || (i.z == 0 || i.z == b.z))// || (i.x > 5 && i.x < 15 && i.z < 15 && i.y-abs(i.x-10) > 11)){
+    if ((i.x == 0 || i.x == b.x) || (i.y == 0 || i.y == b.y) || (i.z == 0 || i.z == b.z)){ // || (i.x > 5 && i.x < 15 && i.z < 15 && i.y-abs(i.x-10) > 11)){
         storeCell(i, cell_type_solid);
     }else{  //if cell isn't solid
         //if current cell isn't water

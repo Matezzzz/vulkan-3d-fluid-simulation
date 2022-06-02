@@ -54,3 +54,34 @@ layout(offset = 252) float fountain_force;
 layout(offset = 256) float solid_repel_velocity;
 
 layout(offset = 260) float particle_max_size;
+
+layout(offset = 272) vec3[8] init_cube_colors; 
+layout(offset = 400) float init_cube_saturation;
+
+layout(offset = 404) float particle_opacity_multiplier;
+layout(offset = 408) float particle_opacity_threshold;
+
+layout(offset = 412) int total_animation_frames;
+layout(offset = 416) float animation_fps;
+layout(offset = 420) int animation_texture_width_images;
+layout(offset = 424) int animation_texture_height_images;
+
+layout(offset = 428) float camera_force_add_magnitude;
+
+layout(offset = 432) float soft_particles_depth_smooth_range;
+layout(offset = 436) float soft_particles_contrast;
+layout(offset = 440) float camera_near;
+layout(offset = 444) float camera_far;
+
+layout(offset = 448) vec3 soft_particles_sphere_color;
+
+layout(offset = 460) float blending_past_coefficient;
+layout(offset = 464) vec3 light_color;
+layout(offset = 476) float ambient_color;
+layout(offset = 480) vec3 light_direction;
+
+layout(offset = 496) vec3 background_color;
+
+layout(offset = 508) float particle_diffusion_strength;
+layout(offset = 512) float particle_diffusion_acceleration_cap;
+layout(offset = 516) float final_render_color_saturation;

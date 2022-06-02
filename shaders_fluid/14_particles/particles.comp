@@ -14,14 +14,18 @@ const int PARTICLE_BUFFER_SIZE = 1000000;
 
 layout(set = 0, binding = 0) uniform simulation_params_buffer{
     layout(offset = 0) uvec3 fluid_size;
+    layout(offset = 28) uint cell_type_solid;
     layout(offset = 32) float time_delta;           //simulation time step
     layout(offset = 236) float active_particle_w;   //W component of active particles will be equal to this value
 };
-layout(set = 0, binding = 1) uniform sampler3D velocities;
-layout(set = 0, binding = 2) buffer restrict particles{
-    vec4 particle_positions[PARTICLE_BUFFER_SIZE];
+layout(set = 0, binding = 1, r32ui) uniform uimage3D cell_types;
+layout(set = 0, binding = 2) uniform sampler3D velocities;
+layout(set = 0, binding = 3) buffer restrict particle_positions{
+    vec4 p_positions[PARTICLE_BUFFER_SIZE];
 };
-
+layout(set = 0, binding = 4) buffer restrict particle_velocities{
+    vec4 p_velocities[PARTICLE_BUFFER_SIZE];
+};
 
 
 //functions for sampling interpolated velocities - described in more detail in 08_advect/advect.comp
@@ -40,13 +44,23 @@ vec3 getVelocityAt(vec3 pos){
 
 
 
+bool solidAt(ivec3 pos){
+    return imageLoad(cell_types, pos).x == cell_type_solid;
+}
 
 
 void main(){
     int i = int(gl_GlobalInvocationID.x);
     //if particle is active
-    if (particle_positions[i].w == active_particle_w){\
-        //get velocity at particle position, move particle according to it
-        particle_positions[i].xyz += getVelocityAt(particle_positions[i].xyz)*time_delta;
+    if (p_positions[i].w == active_particle_w){
+        //damp the particle velocity a bit
+        p_velocities[i].xyz *= 0.99;
+        //move particle according to its' velocity and velocity in the fluid at its' position
+        vec3 new_pos = p_positions[i].xyz + (p_velocities[i].xyz + getVelocityAt(p_positions[i].xyz)) * time_delta;
+        
+        //if particle isn't moving into a solid region, set it's new position
+        if (!solidAt(ivec3(new_pos))){
+            p_positions[i].xyz = new_pos;
+        }
     }
 } 

@@ -26,12 +26,17 @@ public:
         //4 bytes (uint) * 15 indices per config * 256 possible configurations
         vertex_edge_indices_buffer(BufferInfo(4*15*256, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT).create())
     {}
-    void loadData(LocalObjectCreator& local_object_creator){
-        loadFromFile(local_object_creator, triangle_count_buffer, "surface_render_data/polygon_counts.txt", 256);
-        loadFromFile(local_object_creator, vertex_edge_indices_buffer, "surface_render_data/polygon_edge_indices.txt", 256*15);
+    //load counts from file and return them as a vector
+    vector<uint32_t> loadCounts(){
+        return loadFromFile("surface_render_data/polygon_counts.txt", 256);
+    }
+    //load edge indices from file and return them as a vector
+    vector<uint32_t> loadEdgeIndices(){
+        return loadFromFile("surface_render_data/polygon_edge_indices.txt", 256*15);
     }
 private:
-    void loadFromFile(LocalObjectCreator& local_object_creator, Buffer& buffer, const string& filename, uint32_t size){
+    //load values from  given file into a vector of uint32_t, then return the vector
+    vector<uint32_t> loadFromFile(const string& filename, uint32_t size){
         //load all numbers from provided file
         vector<uint32_t> data;
         data.reserve(size);
@@ -41,8 +46,7 @@ private:
             data_file >> a;
             data.push_back(a);
         }
-        //copy loaded numbers to buffer on the GPU
-        local_object_creator.copyToLocal(data, buffer);
+        return data;
     }
 };
 

@@ -1,5 +1,4 @@
 #version 450
-#extension GL_EXT_scalar_block_layout : require
 
 /**
  * render_surface.geom
@@ -23,12 +22,14 @@ layout(set = 0, binding = 0) uniform simulation_params_buffer{
 //if I take all eight corners, and for each one, I determine whether f in it is positive or negative. This gives me 8 bits, joining them together gives me the configuration number
 //for each configuration, there are given triangles that define the surface
 //triangle_counts represents how many triangles have to be rendered for given configuration, these go from 0 to 5
-layout(set = 0, binding = 1, std430) uniform triangle_counts{
-    uint counts[256];
+//uvec4 is used to work around glsl array memory alignment rules
+layout(set = 0, binding = 1) uniform triangle_counts{
+    uvec4 counts[256/4];
 };
 //triangle_vertices describe edge indices, 0 - 15 based on triangle count. 3 edge indices will be converted to 3 vertex positions and will form one triangle.
-layout(set = 0, binding = 2, std430) uniform triangle_vertices{
-    uint vertex_edge_indices[15*256];
+//uvec4 is used to work around glsl array memory alignment rules
+layout(set = 0, binding = 2) uniform triangle_vertices{
+    uvec4 vertex_edge_indices[15*256/4];
 };
 layout(set = 0, binding = 3, r32f) uniform restrict readonly image3D float_densities;
 
@@ -39,6 +40,17 @@ float getDensity(ivec3 index){
 layout (push_constant) uniform render_surface_push{
     mat4 MVP;
 };
+
+//intex into counts like it was an array of uints
+uint getEdgeCount(int i){
+    return counts[i/4][i%4];
+}
+
+//intex into edge indices like it was an array of uints
+uint getEdgeIndex(int i){
+    return vertex_edge_indices[i/4][i%4];
+}
+
 
 
 //8 corners and the moves required to reach each one of them
@@ -58,7 +70,7 @@ void renderTriangle(float[8] densities, int edge_indices_offset){
     //go through three points in current triangle
     for (int i = 0; i < 3; i++){
         //find out the index of current edge
-        uint edge_index = vertex_edge_indices[edge_indices_offset+i];
+        uint edge_index = getEdgeIndex(edge_indices_offset+i);
         ivec2 edge = edges[edge_index];
         //find out where on the edge the vertex is using interpolation (if density in first point is -1 and in second 3, point will be one quarter from point 1 - that's where function should be 0)
         float a = densities[edge[0]] / (densities[edge[0]] - densities[edge[1]]);
@@ -94,7 +106,7 @@ void main(){
         configuration |= int(densities[i] > 0) << i;
     }
     //read how many triangles should be rendered for current configuration
-    uint triangle_count = counts[configuration];
+    uint triangle_count = getEdgeCount(configuration);
     //loop over all triangles
     for (int i = 0; i < triangle_count; i++){
         //configuration * 15 represents offset from start of vertex_edge_indices buffer, i * 3 represents current triangle offset in this configuration
