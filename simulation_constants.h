@@ -187,7 +187,7 @@ const float ambient_light = 0.3f;
 const vec3 light_direction{1.f, -1.f, -1.f};
 
 //what color does the soft particles sphere have
-const vec3 soft_particles_sphere_color{1.f, 0.f, 1.f};
+const vec3 soft_particles_sphere_color{1.f, 1.f, 1.f};
 
 //render background color (black)
 const vec3 background_color{0.0f, 0.0f, 0.0f};
